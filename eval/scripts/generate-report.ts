@@ -1,6 +1,10 @@
 import fs from "fs";
 import path from "path";
 import chalk from "chalk";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface AgentMetric {
   turns: number;
@@ -34,7 +38,18 @@ export function generateEvaluationReport(options?: { printTerminal?: boolean }):
   markdown: string;
   summary: Record<string, any>;
 } {
-  const datasetDir = path.resolve(process.cwd(), "eval/datasets");
+  const candidateDirs = [
+    path.resolve(process.cwd(), "eval/datasets"),
+    path.resolve(__dirname, "../../../eval/datasets"),
+    path.resolve(__dirname, "../../eval/datasets"),
+    path.resolve(__dirname, "../datasets"),
+  ];
+
+  let datasetDir = candidateDirs.find((d) => fs.existsSync(d));
+  if (!datasetDir) {
+    throw new Error(`Unable to locate eval/datasets directory in [${candidateDirs.join(", ")}]`);
+  }
+
   const files = fs.readdirSync(datasetDir).filter((f) => f.endsWith(".json"));
 
   const tasks: TaskData[] = [];
@@ -152,7 +167,14 @@ export function generateEvaluationReport(options?: { printTerminal?: boolean }):
   md += `When an agent encounters a difficult concurrency bug, naive agents enter a "token-burning hallucination loop" (attempting minor edits repeatedly). Kobayashi monitors bash/test return codes. Upon 2 consecutive failures, it triggers \`call_advisor\`, sending an isolated 500-token problem summary to Claude Sonnet 5.5 rather than re-transmitting the entire 30,000+ token context.\n`;
 
   // Output to reports dir
-  const reportPath = path.resolve(process.cwd(), "eval/BENCHMARK_RESULTS.md");
+  const candidateReportDirs = [
+    path.resolve(process.cwd(), "eval"),
+    path.resolve(__dirname, "../../../eval"),
+    path.resolve(__dirname, "../../eval"),
+    path.resolve(__dirname, ".."),
+  ];
+  const targetReportDir = candidateReportDirs.find((d) => fs.existsSync(d)) || process.cwd();
+  const reportPath = path.join(targetReportDir, "BENCHMARK_RESULTS.md");
   fs.writeFileSync(reportPath, md);
 
   if (options?.printTerminal) {
