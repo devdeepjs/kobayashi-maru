@@ -1,8 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { appendFileSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { appendFileSync, readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 
 const execFileAsync = promisify(execFile);
 
@@ -477,7 +477,128 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     }
   });
 
-  // --- 4. TURN ORCHESTRATION & DYNAMIC TIER ROUTING ---
+  // --- 4. PROGRESSIVE SKILL DISCLOSURE & DYNAMIC WORKFLOW RETRIEVAL ---
+
+  interface SkillCatalogItem {
+    name: string;
+    description: string;
+    filePath: string;
+    body: string;
+    triggers: string[];
+  }
+
+  let cachedSkills: SkillCatalogItem[] | null = null;
+
+  function getSkillCatalog(): SkillCatalogItem[] {
+    if (cachedSkills) return cachedSkills;
+
+    const catalog: SkillCatalogItem[] = [];
+    const searchDirs = [
+      resolve(process.cwd(), ".agents", "skills"),
+      join(homedir(), ".agents", "skills"),
+    ];
+
+    const seen = new Set<string>();
+
+    for (const sDir of searchDirs) {
+      if (!existsSync(sDir)) continue;
+      try {
+        const entries = readdirSync(sDir, { withFileTypes: true });
+        for (const ent of entries) {
+          if (!ent.isDirectory() || seen.has(ent.name)) continue;
+          const skillFile = join(sDir, ent.name, "SKILL.md");
+          if (!existsSync(skillFile)) continue;
+
+          try {
+            const raw = readFileSync(skillFile, "utf8");
+            let description = "";
+            let name = ent.name;
+            let body = raw;
+
+            const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+            if (fmMatch) {
+              body = fmMatch[2].trim();
+              const descMatch = fmMatch[1].match(/description:\s*(.+)/);
+              if (descMatch) description = descMatch[1].replace(/^["']|["']$/g, "").trim();
+              const nameMatch = fmMatch[1].match(/name:\s*(.+)/);
+              if (nameMatch) name = nameMatch[1].replace(/^["']|["']$/g, "").trim();
+            }
+
+            const triggers = new Set<string>([
+              name.toLowerCase(),
+              name.replace(/-/g, " ").toLowerCase(),
+              `/${name.toLowerCase()}`,
+            ]);
+
+            // Add intelligent semantic trigger words for standard engineering workflows
+            if (name === "code-review") {
+              ["review", "code review", "pr review", "pull request", "review changes", "standards"].forEach((t) => triggers.add(t));
+            } else if (name === "tdd") {
+              ["tdd", "test-driven", "test driven", "write tests first", "red green refactor", "unit test"].forEach((t) => triggers.add(t));
+            } else if (name === "to-spec") {
+              ["to-spec", "spec", "prd", "specification", "requirements doc"].forEach((t) => triggers.add(t));
+            } else if (name === "to-tickets") {
+              ["to-tickets", "break into tickets", "tracer bullets", "decompose tasks", "tickets"].forEach((t) => triggers.add(t));
+            } else if (name === "grill-me" || name === "grilling") {
+              ["grill me", "grill-me", "interview me", "sharpen plan", "challenge design"].forEach((t) => triggers.add(t));
+            } else if (name === "diagnosing-bugs") {
+              ["diagnose bug", "reproduce bug", "hard bug", "troubleshoot", "root cause"].forEach((t) => triggers.add(t));
+            } else if (name === "domain-modeling") {
+              ["domain model", "glossary", "ubiquitous language", "adr"].forEach((t) => triggers.add(t));
+            } else if (name === "codebase-design") {
+              ["codebase design", "deep module", "information hiding"].forEach((t) => triggers.add(t));
+            } else if (name === "archify") {
+              ["archify", "architecture diagram", "mermaid diagram", "sequence diagram"].forEach((t) => triggers.add(t));
+            } else if (name === "pr") {
+              ["pr body", "write a pr", "pull request description"].forEach((t) => triggers.add(t));
+            } else if (name === "chief-of-staff") {
+              ["chief of staff", "coordinate subagents"].forEach((t) => triggers.add(t));
+            }
+
+            catalog.push({
+              name,
+              description,
+              filePath: skillFile,
+              body,
+              triggers: Array.from(triggers),
+            });
+            seen.add(name);
+          } catch {}
+        }
+      } catch {}
+    }
+
+    cachedSkills = catalog;
+    return catalog;
+  }
+
+  function matchSkillsForPrompt(promptText: string): SkillCatalogItem[] {
+    const catalog = getSkillCatalog();
+    const lower = promptText.toLowerCase();
+    const matched: SkillCatalogItem[] = [];
+
+    for (const skill of catalog) {
+      for (const trigger of skill.triggers) {
+        if (trigger.startsWith("/")) {
+          if (lower.includes(trigger)) {
+            matched.push(skill);
+            break;
+          }
+        } else {
+          const regex = new RegExp(`\\b${trigger.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "i");
+          if (regex.test(lower)) {
+            matched.push(skill);
+            break;
+          }
+        }
+      }
+      if (matched.length >= 2) break; // Maximum 2 skills to prevent token bloat
+    }
+
+    return matched;
+  }
+
+  // --- 5. TURN ORCHESTRATION & DYNAMIC TIER ROUTING ---
 
   pi.on("before_agent_start", async (event: any, ctx: PiContext) => {
     filesReadInRun.clear();
@@ -556,6 +677,17 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       guidance +=
         `\n- Frontier Advisor Tool (\`call_advisor\`): If you encounter hard architectural choices or repeated test failures, call \`call_advisor\` to consult Claude Sonnet 5.5 statelessly.` +
         `\n- Tier Switcher Tool (\`switch_tier\`): If this task requires full frontier reasoning, call \`switch_tier\` to promote to 'orchestrator'.`;
+    }
+
+    // Progressive Skill Disclosure: inject matched workflow instructions for this turn only
+    const matchedSkills = matchSkillsForPrompt(text);
+    if (matchedSkills.length > 0) {
+      for (const s of matchedSkills) {
+        guidance += `\n\n[DYNAMIC WORKFLOW INSTRUCTIONS ACTIVATED: ${s.name.toUpperCase()}]\n${s.body}\n[END DYNAMIC WORKFLOW: ${s.name.toUpperCase()}]`;
+      }
+      if (ctx?.hasUI) {
+        ctx.ui.notify(`[Kobayashi]: Auto-loaded workflow: ${matchedSkills.map((s) => s.name).join(", ")}`, "info");
+      }
     }
 
     return {
@@ -911,6 +1043,63 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       }
       return {
         content: [{ type: "text", text: `[Local Workhorse]: No response returned.` }],
+      };
+    },
+  });
+
+  // --- 9. REGISTER DYNAMIC SKILL LOADER TOOL (AUTONOMOUS DISCOVERY) ---
+
+  pi.registerTool({
+    name: "load_skill",
+    label: "Load Skill Workflow Instructions",
+    description:
+      "Dynamically load specialized workflow instructions for an installed skill (e.g., 'code-review', 'tdd', 'to-spec', 'to-tickets', 'diagnosing-bugs', 'domain-modeling', 'jira'). Call this when you need detailed domain instructions without polluting the default system prompt.",
+    parameters: {
+      type: "object",
+      properties: {
+        skill_name: {
+          type: "string",
+          description: "Name of the skill to load (e.g. 'tdd', 'code-review', 'to-spec', 'domain-modeling', 'diagnosing-bugs')",
+        },
+      },
+      required: ["skill_name"],
+    },
+    execute: async (
+      _callId: string,
+      params: { skill_name: string },
+      _signal: any,
+      _onUpdate: any,
+      ctx: PiContext
+    ) => {
+      const catalog = getSkillCatalog();
+      const q = (params.skill_name || "").toLowerCase().trim();
+      const found = catalog.find(
+        (s) =>
+          s.name.toLowerCase() === q ||
+          s.triggers.includes(q) ||
+          s.name.toLowerCase().includes(q)
+      );
+      if (!found) {
+        const available = catalog.map((s) => s.name).slice(0, 20).join(", ");
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Skill "${params.skill_name}" not found. Available skills include: ${available}...`,
+            },
+          ],
+        };
+      }
+      if (ctx?.hasUI) {
+        ctx.ui.notify(`[Kobayashi]: Dynamically loaded skill: ${found.name}`, "info");
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `[SKILL: ${found.name.toUpperCase()}]\nDescription: ${found.description}\n\n${found.body}`,
+          },
+        ],
       };
     },
   });

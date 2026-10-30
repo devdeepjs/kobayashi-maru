@@ -1,35 +1,62 @@
 #!/usr/bin/env node
+/**
+ * Kobayashi Executive Telemetry & Agent Observability Console
+ * Modern 2-Pane Datadog/Vercel-Grade Observability Suite with Persistent Light/Dark Themes
+ * Port: 4200 (Default)
+ */
+
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { exec } from "node:child_process";
 
+const PORT = 4200;
 const PI_DIR = path.join(os.homedir(), ".pi", "agent");
 const SESSIONS_DIR = path.join(PI_DIR, "sessions");
 const LEDGER_PATH = path.join(PI_DIR, "savings-ledger.jsonl");
-const PORT = Number(process.env.PI_EXEC_PORT || 4200);
 
+// Exact pricing rates ($ per 1M tokens)
 const PRICING = {
-  "ornith-1.5:ctx": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tier: "Workhorse: Local ($0.00)", color: "#2da44e" },
-  "openai.gpt-5.6-luna": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22, tier: "Orchestrator: Mantle Cached", color: "#0969da" },
-  "openai.gpt-6-luna": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22, tier: "Orchestrator: Mantle Cached", color: "#0969da" },
-  "us.openai.gpt-6-sol": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22, tier: "Orchestrator: Mantle Cached", color: "#0969da" },
+  "ornith-1.5:ctx": { input: 0.00, output: 0.00, cacheRead: 0.00, cacheWrite: 0.00, tier: "Workhorse: Local RAM ($0.00)", color: "#10b981" },
+  "ornith-1.5:9b": { input: 0.00, output: 0.00, cacheRead: 0.00, cacheWrite: 0.00, tier: "Workhorse: Local RAM ($0.00)", color: "#10b981" },
+  "openai.gpt-5.6-luna": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22, tier: "Orchestrator: Mantle Cached", color: "#3b82f6" },
+  "openai.gpt-6-luna": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22, tier: "Orchestrator: Mantle Cached", color: "#3b82f6" },
+  "us.openai.gpt-6-sol": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22, tier: "Orchestrator: Mantle Cached", color: "#3b82f6" },
   "global.anthropic.claude-haiku-5-5": { input: 0.80, output: 4.00, cacheRead: 0.08, cacheWrite: 0.80, tier: "Triage: Haiku 5.5", color: "#057a55" },
   "global.anthropic.claude-haiku-4-5-20251001-v1:0": { input: 0.80, output: 4.00, cacheRead: 0.08, cacheWrite: 0.80, tier: "Triage: Haiku 4.5", color: "#057a55" },
-  "us.anthropic.claude-sonnet-5-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#bf8700" },
-  "us.anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#bf8700" },
-  "global.anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#bf8700" },
-  "global.anthropic.claude-sonnet-5-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#bf8700" },
-  "us.anthropic.claude-sonnet-4-6": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 4.6", color: "#bf8700" },
-  "us.anthropic.claude-sonnet-4-5-20250929-v1:0": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 4.5", color: "#bf8700" },
-  "global.anthropic.claude-sonnet-4-5-20250929-v1:0": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 4.5", color: "#bf8700" },
-  "anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#bf8700" },
-  "au.anthropic.claude-opus-4-6-v1": { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 18.75, tier: "Frontier: Opus 4.6", color: "#8250df" }
+  "us.anthropic.claude-sonnet-5-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#a855f7" },
+  "us.anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#a855f7" },
+  "global.anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#a855f7" },
+  "global.anthropic.claude-sonnet-5-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#a855f7" },
+  "us.anthropic.claude-sonnet-4-6": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 4.6", color: "#a855f7" },
+  "us.anthropic.claude-sonnet-4-5-20250929-v1:0": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 4.5", color: "#a855f7" },
+  "global.anthropic.claude-sonnet-4-5-20250929-v1:0": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 4.5", color: "#a855f7" },
+  "anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75, tier: "Advisor: Sonnet 5.5", color: "#a855f7" },
+  "au.anthropic.claude-opus-4-6-v1": { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 18.75, tier: "Frontier: Opus 4.6", color: "#e11d48" }
 };
 
 const SONNET_RATE = { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 };
 const DSH_V4_PRO_RATE = { input: 1.74, output: 3.48, cacheRead: 0.145, cacheWrite: 1.74 };
+
+function getModelRate(modelName) {
+  if (!modelName) return PRICING["openai.gpt-5.6-luna"];
+  const clean = modelName.split("/").pop();
+  if (PRICING[clean]) return PRICING[clean];
+  if (/ornith|qwen|llama|mistral|deepseek-r1/i.test(clean) || modelName.startsWith("ollama")) {
+    return { input: 0.00, output: 0.00, cacheRead: 0.00, cacheWrite: 0.00, tier: "Workhorse: Local RAM ($0.00)", color: "#10b981" };
+  }
+  if (/haiku/i.test(clean)) {
+    return PRICING["global.anthropic.claude-haiku-5-5"];
+  }
+  if (/sonnet/i.test(clean)) {
+    return PRICING["us.anthropic.claude-sonnet-5-5"];
+  }
+  if (/opus/i.test(clean)) {
+    return PRICING["au.anthropic.claude-opus-4-6-v1"];
+  }
+  return PRICING["openai.gpt-5.6-luna"];
+}
 
 function formatRepoName(folderName) {
   if (folderName.includes("geo-risk")) return "geo-risk";
@@ -94,8 +121,14 @@ function getAllSessionsMeta() {
                   const cleanModel = m.split("/").pop();
                   models.add(cleanModel);
 
-                  const rate = PRICING[cleanModel] || PRICING["openai.gpt-5.6-luna"];
-                  actualCost += (inp * rate.input + out * rate.output + cr * rate.cacheRead + cw * rate.cacheWrite) / 1e6;
+                  const rate = getModelRate(cleanModel);
+                  if (rate.input === 0 && rate.output === 0) {
+                    // $0.00 local model
+                  } else if (u.cost?.total && typeof u.cost.total === "number" && u.cost.total > 0) {
+                    actualCost += u.cost.total;
+                  } else {
+                    actualCost += (inp * rate.input + out * rate.output + cr * rate.cacheRead + cw * rate.cacheWrite) / 1e6;
+                  }
                   sonnetCost += (inp * SONNET_RATE.input + out * SONNET_RATE.output + cr * SONNET_RATE.cacheRead + cw * SONNET_RATE.cacheWrite) / 1e6;
                 }
               } catch {}
@@ -135,12 +168,17 @@ function getAllSessionsMeta() {
 function parseDetailedSession(sessionFileEntry) {
   const turnAudit = [];
   const timeline = [];
-  let cumActual = 0, cumSonnetCached = 0, cumSonnetCold = 0, cumDsh = 0;
+  let cumActual = 0, cumSonnetCached = 0, cumSonnetCold = 0;
   let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheWrite = 0, totalReasoning = 0;
   let totalTurns = 0, totalToolCalls = 0;
   let bashErrors = 0, delegationCount = 0;
   const tools = {};
   const models = {};
+  const tierTokens = {
+    workhorse: 0,
+    orchestrator: 0,
+    advisor: 0,
+  };
 
   const fullPath = path.join(SESSIONS_DIR, sessionFileEntry.repoKey, sessionFileEntry.fileName);
   if (!fs.existsSync(fullPath)) return null;
@@ -180,22 +218,22 @@ function parseDetailedSession(sessionFileEntry) {
           recordTool(rec.toolName || rec.name, rec.isError);
         }
         if (Array.isArray(rec.message?.content)) {
-          for (const part of rec.message.content) {
-            if (part.type === "toolCall" || part.type === "tool_use") {
-              recordTool(part.name || part.toolName, false);
-            }
+          for (const p of rec.message.content) {
+            if (p.type === "tool_call" || p.name) recordTool(p.name, p.isError);
+            if (p.type === "tool_result" && p.isError) bashErrors++;
           }
         }
 
-        const u = rec.message?.usage;
-        if (u) {
+        if (rec.message?.usage) {
+          const u = rec.message.usage;
           const inp = Number(u.input ?? 0);
           const out = Number(u.output ?? 0);
           const cr = Number(u.cacheRead ?? 0);
           const cw = Number(u.cacheWrite ?? 0);
           const reasoning = Number(u.reasoning ?? 0);
+          const turnTokens = inp + out + cr + cw;
 
-          if (inp + out + cr + cw === 0) continue;
+          if (turnTokens === 0) continue;
 
           totalTurns++;
           totalInput += inp;
@@ -204,16 +242,26 @@ function parseDetailedSession(sessionFileEntry) {
           totalCacheWrite += cw;
           totalReasoning += reasoning;
 
-          const rate = PRICING[currentModel] || PRICING["openai.gpt-5.6-luna"];
-          const turnActual = (inp * rate.input + out * rate.output + cr * rate.cacheRead + cw * rate.cacheWrite) / 1e6;
+          const rate = getModelRate(currentModel);
+          let turnActual = (inp * rate.input + out * rate.output + cr * rate.cacheRead + cw * rate.cacheWrite) / 1e6;
+          if (rate.input === 0 && rate.output === 0) {
+            turnActual = 0;
+            tierTokens.workhorse += turnTokens;
+          } else if (u.cost?.total && typeof u.cost.total === "number" && u.cost.total > 0) {
+            turnActual = u.cost.total;
+            if (/sonnet|opus/i.test(currentModel)) tierTokens.advisor += turnTokens;
+            else tierTokens.orchestrator += turnTokens;
+          } else {
+            if (/sonnet|opus/i.test(currentModel)) tierTokens.advisor += turnTokens;
+            else tierTokens.orchestrator += turnTokens;
+          }
+
           const turnSonnetCached = (inp * SONNET_RATE.input + out * SONNET_RATE.output + cr * SONNET_RATE.cacheRead + cw * SONNET_RATE.cacheWrite) / 1e6;
           const turnSonnetCold = ((inp + cr + cw) * SONNET_RATE.input + out * SONNET_RATE.output) / 1e6;
-          const turnDsh = (inp * DSH_V4_PRO_RATE.input + out * DSH_V4_PRO_RATE.output + cr * DSH_V4_PRO_RATE.cacheRead + cw * DSH_V4_PRO_RATE.cacheWrite) / 1e6;
 
           cumActual += turnActual;
           cumSonnetCached += turnSonnetCached;
           cumSonnetCold += turnSonnetCold;
-          cumDsh += turnDsh;
 
           if (!models[currentModel]) {
             models[currentModel] = { model: currentModel, tier: rate.tier, color: rate.color, turns: 0, actualUsd: 0, sonnetUsd: 0 };
@@ -224,7 +272,7 @@ function parseDetailedSession(sessionFileEntry) {
 
           const promptToks = inp + cr + cw;
           const hitRate = promptToks > 0 ? ((cr / promptToks) * 100).toFixed(0) + "%" : "0%";
-          const durationSec = rec.message?.durationMs ? (rec.message.durationMs / 1000).toFixed(1) + "s" : "-";
+          const durationSec = rec.message?.durationMs ? Number((rec.message.durationMs / 1000).toFixed(1)) : 1.2;
 
           let reasoningSummary = "";
           if (Array.isArray(rec.message?.content)) {
@@ -252,7 +300,7 @@ function parseDetailedSession(sessionFileEntry) {
             actualUsd: turnActual,
             sonnetUsd: turnSonnetCached,
             savedUsd: Math.max(0, turnSonnetCached - turnActual),
-            duration: durationSec,
+            duration: durationSec + "s",
             tools: Array.from(new Set(turnTools)),
             reasoningSummary: reasoningSummary.slice(0, 280)
           });
@@ -265,7 +313,7 @@ function parseDetailedSession(sessionFileEntry) {
             actualSpend: Number(cumActual.toFixed(4)),
             sonnetCached: Number(cumSonnetCached.toFixed(4)),
             sonnetCold: Number(cumSonnetCold.toFixed(4)),
-            durationSec: rec.message?.durationMs ? Number((rec.message.durationMs / 1000).toFixed(1)) : 1.5
+            durationSec: durationSec
           });
         }
       } catch {}
@@ -297,6 +345,7 @@ function parseDetailedSession(sessionFileEntry) {
     delegationCount,
     totalToolCalls,
     bashErrors,
+    tierTokens,
     tools: Object.entries(tools).sort((a, b) => b[1] - a[1]),
     models: Object.values(models),
     timeline,
@@ -334,7 +383,7 @@ function getDashboardPayload(repoFilter = "all", selectedFileName = null) {
   const sessionDetail = activeSession ? parseDetailedSession(activeSession) : null;
 
   // Global aggregate metrics across filtered scope
-  let aggTurns = 0, aggTokens = 0, aggActual = 0, aggSonnet = 0, aggCached = 0, aggPrompt = 0;
+  let aggTurns = 0, aggTokens = 0, aggActual = 0, aggSonnet = 0, aggCached = 0;
   for (const s of filteredSessions) {
     aggTurns += s.turns;
     aggTokens += s.totalTokens;
@@ -370,27 +419,28 @@ const HTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Kobayashi // Agent Observability & Telemetry</title>
+<title>Kobayashi // Agent Observability & Telemetry HUD</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
 <style>
   :root[data-theme="dark"] {
-    --bg-page: #0b0f17;
-    --bg-card: #111827;
-    --bg-subtle: #1f2937;
-    --bg-input: #111827;
-    --border: #283548;
-    --border-subtle: #1e293b;
-    --fg-default: #f3f4f6;
-    --fg-muted: #9ca3af;
-    --fg-subtle: #6b7280;
+    --bg-page: #07090e;
+    --bg-card: #0d121f;
+    --bg-subtle: #141c2e;
+    --bg-input: #0a0f1a;
+    --border: #1e293b;
+    --border-subtle: #151f30;
+    --fg-default: #f8fafc;
+    --fg-muted: #94a3b8;
+    --fg-subtle: #64748b;
     --accent-blue: #3b82f6;
     --accent-green: #10b981;
     --accent-amber: #f59e0b;
+    --accent-purple: #a855f7;
     --accent-red: #ef4444;
-    --card-active: #1e293b;
+    --card-active: #172136;
     --chart-grid: rgba(255, 255, 255, 0.05);
   }
 
@@ -402,11 +452,12 @@ const HTML = `<!DOCTYPE html>
     --border: #e2e8f0;
     --border-subtle: #edf2f7;
     --fg-default: #0f172a;
-    --fg-muted: #64748b;
-    --fg-subtle: #94a3b8;
+    --fg-muted: #475569;
+    --fg-subtle: #64748b;
     --accent-blue: #2563eb;
     --accent-green: #059669;
     --accent-amber: #d97706;
+    --accent-purple: #9333ea;
     --accent-red: #dc2626;
     --card-active: #e2e8f0;
     --chart-grid: rgba(0, 0, 0, 0.06);
@@ -448,6 +499,7 @@ const HTML = `<!DOCTYPE html>
   .mini-badge { font-size: 9.5px; font-weight: 600; padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; }
   .mini-badge.green { color: var(--accent-green); border-color: rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.08); }
   .mini-badge.blue { color: var(--accent-blue); border-color: rgba(59, 130, 246, 0.35); background: rgba(59, 130, 246, 0.08); }
+  .mini-badge.purple { color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.35); background: rgba(168, 85, 247, 0.08); }
 
   /* Right Pane: Telemetry Analytics & Replay */
   .main-content { flex: 1; overflow-y: auto; padding: 20px 24px 60px 24px; }
@@ -465,8 +517,8 @@ const HTML = `<!DOCTYPE html>
   .kpi-val { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--fg-default); letter-spacing: -0.02em; margin-bottom: 2px; }
   .kpi-sub { font-size: 11px; color: var(--fg-subtle); }
 
-  /* Charts Grid */
-  .charts-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; margin-bottom: 18px; }
+  /* Charts Grid (2x2 Matrix) */
+  .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 18px; }
   .chart-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; }
   .cp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; }
   .cp-title { font-size: 12px; font-weight: 700; color: var(--fg-default); text-transform: uppercase; letter-spacing: 0.03em; }
@@ -485,15 +537,18 @@ const HTML = `<!DOCTYPE html>
   .badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 600; border: 1px solid var(--border); }
   .badge.green { color: var(--accent-green); border-color: rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.08); }
   .badge.blue { color: var(--accent-blue); border-color: rgba(59, 130, 246, 0.35); background: rgba(59, 130, 246, 0.08); }
-  .badge.amber { color: var(--accent-amber); border-color: rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08); }
+  .badge.purple { color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.35); background: rgba(168, 85, 247, 0.08); }
 
   .trace-details-box { padding: 10px 14px; background: var(--bg-subtle); border-radius: 6px; margin: 6px 0; font-size: 11px; line-height: 1.5; color: var(--fg-muted); }
   .trace-details-box b { color: var(--fg-default); }
 
+  @media (max-width: 1200px) {
+    .charts-grid { grid-template-columns: 1fr; }
+  }
+
   @media (max-width: 1024px) {
     .app-shell { flex-direction: column; height: auto; }
     .sidebar { width: 100%; height: 260px; border-right: none; border-bottom: 1px solid var(--border); }
-    .charts-grid { grid-template-columns: 1fr; }
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
@@ -503,7 +558,7 @@ const HTML = `<!DOCTYPE html>
   <!-- Top Navigation Bar -->
   <header class="top-nav">
     <div class="nav-left">
-      <div class="brand-title">KOBAYASHI // OBSERVABILITY</div>
+      <div class="brand-title">KOBAYASHI // OBSERVABILITY & TELEMETRY HUD</div>
       <span class="live-tag"><span class="live-dot"></span> Live Telemetry</span>
     </div>
     <div class="nav-right">
@@ -518,33 +573,32 @@ const HTML = `<!DOCTYPE html>
     <!-- Left Sidebar: Session Explorer -->
     <aside class="sidebar">
       <div class="sidebar-filter-box">
-        <input type="text" class="search-input" id="search-box" placeholder="🔍 Search prompts or tasks..." oninput="onSearchInput()">
-        <select class="repo-select" id="repo-filter" onchange="onRepoChange()">
+        <input type="text" id="search-box" class="search-input" placeholder="🔍 Search prompts, keywords, models..." oninput="onSearchInput()" />
+        <select id="repo-filter" class="repo-select" onchange="onRepoChange()">
           <option value="all">🌐 All Workspaces</option>
         </select>
       </div>
-
       <div class="sidebar-list" id="session-cards-box">
-        <!-- Rendered by JS -->
+        <div style="padding:16px; font-size:11.5px; color:var(--fg-subtle); text-align:center;">Loading sessions...</div>
       </div>
     </aside>
 
-    <!-- Right Main Area: Selected Session Telemetry & Replay -->
+    <!-- Right Pane: Telemetry Analytics & Replay -->
     <main class="main-content">
       
-      <!-- Session Context Banner -->
-      <section class="session-header" id="session-banner">
+      <!-- Session Header Banner -->
+      <section class="session-header">
         <div>
-          <div class="sh-prompt" id="banner-title">Select a session from the left sidebar</div>
+          <h1 class="sh-prompt" id="banner-title">Select a Session</h1>
           <div class="sh-sub">
             <span>Workspace: <b id="banner-repo">-</b></span>
             <span>Recorded: <b id="banner-time">-</b></span>
-            <span>File: <code style="font-family:'JetBrains Mono',monospace;" id="banner-file">-</code></span>
+            <span>Session: <b class="mono" id="banner-file">-</b></span>
           </div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:20px; font-weight:800; font-family:'JetBrains Mono',monospace; color:var(--accent-green);" id="banner-saved">$0.0000</div>
-          <div style="font-size:10px; font-weight:600; color:var(--fg-muted); text-transform:uppercase;">Net Dollars Saved</div>
+          <div style="font-size:10px; font-weight:700; color:var(--fg-muted); text-transform:uppercase;">Counterfactual Savings</div>
+          <div class="mono" style="font-size:22px; font-weight:700; color:var(--accent-green);" id="banner-saved">$0.0000</div>
         </div>
       </section>
 
@@ -575,7 +629,7 @@ const HTML = `<!DOCTYPE html>
         </div>
       </section>
 
-      <!-- Charts Row: Cache Efficiency Stacked & Cost Curve -->
+      <!-- Charts 2x2 Matrix: Token Stream, Cost Curve, Tier Donut, Latency Waterfall -->
       <section class="charts-grid">
         <div class="chart-panel">
           <div class="cp-head">
@@ -589,34 +643,54 @@ const HTML = `<!DOCTYPE html>
 
         <div class="chart-panel">
           <div class="cp-head">
-            <span class="cp-title">Cumulative Cost vs Claude Code</span>
+            <span class="cp-title">Cumulative Cost Trajectory vs Baseline</span>
             <span class="cp-meta" id="cost-chart-meta">USD</span>
           </div>
           <div class="chart-container">
             <canvas id="costChart"></canvas>
           </div>
         </div>
+
+        <div class="chart-panel">
+          <div class="cp-head">
+            <span class="cp-title">Workload Allocation by Tier</span>
+            <span class="cp-meta">Token Volume</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="tierPieChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-panel">
+          <div class="cp-head">
+            <span class="cp-title">Turn Latency & Duration</span>
+            <span class="cp-meta">Seconds</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="durationChart"></canvas>
+          </div>
+        </div>
       </section>
 
-      <!-- Turn-by-Turn Replay Inspector -->
+      <!-- Turn-by-Turn Replay Inspector Table -->
       <section class="trace-panel">
-        <div class="cp-head">
-          <span class="cp-title">Turn-by-Turn Execution Replay</span>
-          <span class="cp-meta">Click turn row to expand details</span>
+        <div class="cp-head" style="margin-bottom:12px;">
+          <span class="cp-title">Turn-by-Turn Replay & Pricing Inspector</span>
+          <span class="cp-meta">Click row to expand reasoning & tool execution</span>
         </div>
         <table>
           <thead>
             <tr>
-              <th>#</th>
+              <th>Turn</th>
               <th>Time</th>
-              <th>User Prompt / Task</th>
-              <th>Model</th>
-              <th>Latency</th>
-              <th>Cache Read</th>
-              <th>Fresh In</th>
-              <th>Out</th>
-              <th>Cost ($)</th>
-              <th>Tools</th>
+              <th>Model / Tier</th>
+              <th>Cached Read</th>
+              <th>Fresh Input</th>
+              <th>Output</th>
+              <th>Cache Hit %</th>
+              <th>Actual Spend</th>
+              <th>Saved vs Sonnet</th>
+              <th>Duration</th>
             </tr>
           </thead>
           <tbody id="turn-rows">
@@ -633,6 +707,8 @@ let globalData = null;
 let activeSessionFile = null;
 let tokensChartInstance = null;
 let costChartInstance = null;
+let tierPieChartInstance = null;
+let durationChartInstance = null;
 
 const fNum = (n) => Number(n || 0).toLocaleString();
 const fUsd = (n) => "$" + Number(n || 0).toFixed(4);
@@ -663,10 +739,10 @@ function updateThemeButton(theme) {
 function getChartColors() {
   const isDark = (document.documentElement.getAttribute("data-theme") || "dark") === "dark";
   return {
-    text: isDark ? "#9ca3af" : "#64748b",
+    text: isDark ? "#94a3b8" : "#475569",
     grid: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.06)",
-    bg: isDark ? "#111827" : "#ffffff",
-    border: isDark ? "#283548" : "#e2e8f0"
+    bg: isDark ? "#0d121f" : "#ffffff",
+    border: isDark ? "#1e293b" : "#e2e8f0"
   };
 }
 
@@ -694,7 +770,7 @@ function renderSessionCards(sessions, activeFile, searchQuery = "") {
   box.innerHTML = filtered.map(s => {
     const isActive = s.fileName === activeFile;
     const modelPills = s.models.map(m => {
-      const cls = m.includes("ornith") ? "mini-badge green" : (m.includes("sonnet") ? "mini-badge blue" : "mini-badge");
+      const cls = m.includes("ornith") ? "mini-badge green" : (m.includes("sonnet") ? "mini-badge purple" : "mini-badge blue");
       return '<span class="' + cls + '">' + m.replace(/^openai\./, "").replace(/^us\.anthropic\./, "") + '</span>';
     }).join(" ");
 
@@ -763,7 +839,7 @@ function renderCharts(detail) {
   const cc = getChartColors();
   const timeline = detail.timeline || [];
 
-  // 1. Stacked Tokens Chart
+  // 1. Stacked Tokens Bar Chart
   const ctxT = document.getElementById("tokensChart")?.getContext("2d");
   if (ctxT && typeof Chart !== "undefined") {
     if (tokensChartInstance) tokensChartInstance.destroy();
@@ -772,9 +848,9 @@ function renderCharts(detail) {
       data: {
         labels: timeline.map(t => "T" + t.turn),
         datasets: [
-          { label: "Cached Read ($0.02)", data: timeline.map(t => t.cacheRead), backgroundColor: "#10b981", stack: "s" },
-          { label: "Cold Input ($0.22)", data: timeline.map(t => t.input), backgroundColor: "#3b82f6", stack: "s" },
-          { label: "Output Generation ($1.32)", data: timeline.map(t => t.output), backgroundColor: "#f59e0b", stack: "s" }
+          { label: "Cached Read ($0.02 / $0.00)", data: timeline.map(t => t.cacheRead), backgroundColor: "#10b981", stack: "s" },
+          { label: "Cold Input ($0.22 / $0.00)", data: timeline.map(t => t.input), backgroundColor: "#3b82f6", stack: "s" },
+          { label: "Output Generation ($1.32 / $0.00)", data: timeline.map(t => t.output), backgroundColor: "#f59e0b", stack: "s" }
         ]
       },
       options: {
@@ -791,7 +867,7 @@ function renderCharts(detail) {
     });
   }
 
-  // 2. Cost Trajectory Chart
+  // 2. Cost Trajectory Line Chart
   const ctxC = document.getElementById("costChart")?.getContext("2d");
   if (ctxC && typeof Chart !== "undefined") {
     if (costChartInstance) costChartInstance.destroy();
@@ -843,6 +919,67 @@ function renderCharts(detail) {
       }
     });
   }
+
+  // 3. Workload Allocation by Tier (Donut Chart)
+  const ctxP = document.getElementById("tierPieChart")?.getContext("2d");
+  if (ctxP && typeof Chart !== "undefined") {
+    if (tierPieChartInstance) tierPieChartInstance.destroy();
+    const tt = detail.tierTokens || { workhorse: 0, orchestrator: 0, advisor: 0 };
+    tierPieChartInstance = new Chart(ctxP, {
+      type: "doughnut",
+      data: {
+        labels: ["Local Workhorse ($0.00)", "Cached Orchestrator", "Frontier Advisor"],
+        datasets: [{
+          data: [tt.workhorse, tt.orchestrator, tt.advisor],
+          backgroundColor: ["#10b981", "#3b82f6", "#a855f7"],
+          borderWidth: 2,
+          borderColor: cc.bg
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "right", labels: { boxWidth: 10, font: { size: 10.5 }, color: cc.text } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => \` \${ctx.label}: \${fNum(ctx.raw)} tokens\`
+            }
+          }
+        },
+        cutout: "66%"
+      }
+    });
+  }
+
+  // 4. Latency Waterfall Chart
+  const ctxD = document.getElementById("durationChart")?.getContext("2d");
+  if (ctxD && typeof Chart !== "undefined") {
+    if (durationChartInstance) durationChartInstance.destroy();
+    durationChartInstance = new Chart(ctxD, {
+      type: "bar",
+      data: {
+        labels: timeline.map(t => "T" + t.turn),
+        datasets: [{
+          label: "Turn Latency (s)",
+          data: timeline.map(t => t.durationSec),
+          backgroundColor: "#6366f1",
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: cc.text } },
+          y: { grid: { color: cc.grid }, ticks: { color: cc.text, callback: v => v + "s" } }
+        }
+      }
+    });
+  }
 }
 
 function toggleTurnDetail(idx) {
@@ -859,36 +996,34 @@ function renderTurnRows(turns) {
     return;
   }
 
-  tbody.innerHTML = turns.map((t, idx) => {
-    const toolBadges = (t.tools || []).map(tool => {
-      let cls = "badge";
-      if (tool === "delegate_workhorse") cls += " green";
-      else if (tool === "call_advisor") cls += " amber";
-      return '<span class="' + cls + '">' + tool + '</span>';
-    }).join(" ");
-
-    const expandRow = 
-      '<tr id="turn-exp-' + idx + '" style="display:none; background:var(--bg-subtle);">' +
-        '<td colspan="10" style="padding:10px 14px;">' +
-          '<div class="trace-details-box">' +
-            '<div style="margin-bottom:6px;"><b>User Prompt:</b> <i>' + escapeHtml(t.promptExcerpt) + '</i></div>' +
-            (t.reasoningSummary ? '<div style="margin-bottom:6px;"><b>Model Thinking Excerpt:</b> <i>' + escapeHtml(t.reasoningSummary) + '...</i></div>' : '') +
-            '<div><b>Token Cost Formula:</b> (' + fNum(t.input) + ' cold + ' + fNum(t.cacheRead) + ' cached + ' + fNum(t.output) + ' out) = <b style="color:var(--accent-blue);">' + fUsd(t.actualUsd) + '</b> vs Sonnet: <b style="color:var(--accent-amber);">' + fUsd(t.sonnetUsd) + '</b> (Saved +' + fUsd(t.savedUsd) + ')</div>' +
+  tbody.innerHTML = turns.map(t => {
+    const tierBadge = t.tier === "Workhorse" ? "badge green" : (t.tier === "Advisor" ? "badge purple" : "badge blue");
+    const toolsHtml = (t.tools || []).map(x => '<span class="mini-badge">' + x + '</span>').join(" ");
+    
+    const expandRow = '<tr id="turn-exp-' + t.turnIndex + '" style="display:none; background:var(--bg-subtle);">' +
+      '<td colspan="10" style="padding:12px 16px;">' +
+        '<div class="trace-details-box">' +
+          '<div style="margin-bottom:6px;"><b>Prompt Context:</b> <span>' + escapeHtml(t.promptExcerpt) + '</span></div>' +
+          (t.reasoningSummary ? '<div style="margin-bottom:6px;"><b>Model Reasoning:</b> <span>' + escapeHtml(t.reasoningSummary) + '</span></div>' : '') +
+          (toolsHtml ? '<div style="margin-bottom:6px;"><b>Tool Calls Executed:</b> ' + toolsHtml + '</div>' : '') +
+          '<div style="font-family:JetBrains Mono, monospace; font-size:10.5px; color:var(--fg-subtle); margin-top:8px;">' +
+            'Tokens: ' + fNum(t.input) + ' input + ' + fNum(t.cacheRead) + ' cacheRead + ' + fNum(t.cacheWrite) + ' cacheWrite + ' + fNum(t.output) + ' output = ' + fNum(t.totalTokens) + ' total | Actual: ' + fUsd(t.actualUsd) + ' | Baseline: ' + fUsd(t.sonnetUsd) +
           '</div>' +
-        '</td>' +
-      '</tr>';
+        '</div>' +
+      '</td>' +
+    '</tr>';
 
-    return '<tr onclick="toggleTurnDetail(' + idx + ')">' +
-      '<td class="mono" style="color:var(--fg-subtle);">#' + t.turnIndex + '</td>' +
+    return '<tr onclick="toggleTurnDetail(' + t.turnIndex + ')">' +
+      '<td class="mono" style="font-weight:700;">T' + t.turnIndex + '</td>' +
       '<td class="mono" style="color:var(--fg-subtle);">' + t.ts + '</td>' +
-      '<td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><b>' + escapeHtml(t.promptExcerpt) + '</b></td>' +
-      '<td><span class="badge">' + t.model + '</span></td>' +
-      '<td class="mono">' + t.duration + '</td>' +
-      '<td class="mono" style="color:var(--accent-green);">' + fNum(t.cacheRead) + ' (' + t.cacheHitRate + ')</td>' +
-      '<td class="mono">' + fNum(t.input) + '</td>' +
-      '<td class="mono">' + fNum(t.output) + '</td>' +
-      '<td class="mono" style="color:var(--accent-blue); font-weight:600;">' + fUsd(t.actualUsd) + '</td>' +
-      '<td>' + (toolBadges || '<span style="color:var(--fg-subtle);">chat</span>') + '</td>' +
+      '<td><span class="' + tierBadge + '">' + t.tier + '</span> <span class="mono" style="font-size:10px; color:var(--fg-muted);">' + t.model.replace(/^openai\./, "").replace(/^us\.anthropic\./, "") + '</span></td>' +
+      '<td class="mono" style="color:var(--accent-green);">' + fNum(t.cacheRead) + '</td>' +
+      '<td class="mono" style="color:var(--accent-blue);">' + fNum(t.input) + '</td>' +
+      '<td class="mono" style="color:var(--accent-amber);">' + fNum(t.output) + '</td>' +
+      '<td class="mono">' + t.cacheHitRate + '</td>' +
+      '<td class="mono" style="font-weight:600; color:var(--fg-default);">' + fUsd(t.actualUsd) + '</td>' +
+      '<td class="mono" style="color:var(--accent-green); font-weight:600;">+' + fUsd(t.savedUsd) + '</td>' +
+      '<td class="mono" style="color:var(--fg-subtle);">' + t.duration + '</td>' +
     '</tr>' + expandRow;
   }).join("");
 }
@@ -925,19 +1060,18 @@ async function fetchData(repo = "all", file = null) {
     activeSessionFile = data.activeSessionFile;
 
     updateRepoDropdown(data.repos, data.activeRepo);
-    renderSessionCards(data.sessions, activeSessionFile, document.getElementById("search-box")?.value || "");
+    renderSessionCards(data.sessions, data.activeSessionFile, document.getElementById("search-box").value);
     renderSessionDetail(data.sessionDetail);
   } catch (err) {
-    console.error("Failed to load telemetry data", err);
+    console.error("Failed to load telemetry:", err);
   }
 }
 
-initTheme();
-fetchData();
-setInterval(() => {
-  const repo = document.getElementById("repo-filter")?.value || "all";
-  fetchData(repo, activeSessionFile);
-}, 3000);
+// Bootstrap on DOM ready
+document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
+  fetchData();
+});
 </script>
 </body>
 </html>`;
