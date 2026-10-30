@@ -2,12 +2,16 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { appendFileSync, readFileSync, existsSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 
 const execFileAsync = promisify(execFile);
 const PI_DIR = join(homedir(), ".pi", "agent");
 const LEDGER_PATH = join(PI_DIR, "savings-ledger.jsonl");
 const CONFIG_PATH = join(PI_DIR, "kobayashi-config.json");
+const SPILL_DIR = join(PI_DIR, "spill");
+try {
+  if (!existsSync(SPILL_DIR)) mkdirSync(SPILL_DIR, { recursive: true });
+} catch {}
 
 // Hard-block Layer 1 static patterns
 const HARD_BLOCK_PATTERNS = [
@@ -258,15 +262,39 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     }
   });
 
-  // --- 3. TEST / BASH FAILURE TRACKING & IN-LOOP INJECTION (TOOL_RESULT) ---
+  // --- 3. TEST / BASH FAILURE TRACKING, IN-LOOP INJECTION & TOOL SPILL STORE (TOOL_RESULT) ---
 
   pi.on("tool_result", async (event: any, ctx: PiContext) => {
+    let contentModified = false;
+    let newContent = Array.isArray(event.content) ? [...event.content] : [];
+
+    // Feature A: Hard Tool Output Truncation (Spill Store)
+    // Caps output at ~1500 tokens (6,000 chars) to prevent context window bloat and runaway token bills.
+    const MAX_TOOL_CHARS = config?.compaction?.max_tool_chars || 6000;
+    newContent = newContent.map((part) => {
+      if (part.type === "text" && typeof part.text === "string" && part.text.length > MAX_TOOL_CHARS) {
+        contentModified = true;
+        const fullLen = part.text.length;
+        const spillFile = join(SPILL_DIR, `spill_${Date.now()}_${event.toolName}.log`);
+        try {
+          writeFileSync(spillFile, part.text, "utf8");
+        } catch {}
+        const head = part.text.slice(0, 1500);
+        const tail = part.text.slice(-2500);
+        return {
+          ...part,
+          text: `${head}\n\n... [TRUNCATED ${fullLen - 4000} CHARACTERS BY KOBAYASHI TO PREVENT CONTEXT BLOAT. Full output saved to: ${spillFile}] ...\n\n${tail}`,
+        };
+      }
+      return part;
+    });
+
     if (event.toolName === "bash") {
       let hasError = Boolean(event.isError);
 
       // Also check content for fatal/error keywords
-      if (!hasError && Array.isArray(event.content)) {
-        for (const part of event.content) {
+      if (!hasError) {
+        for (const part of newContent) {
           const str = String(part.text || "").toLowerCase();
           if (
             str.includes("command not found") ||
@@ -285,8 +313,9 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       if (hasError) {
         consecutiveBashFailures++;
         const threshold = config?.router?.escalation_threshold || 2;
-        if (consecutiveBashFailures >= threshold && Array.isArray(event.content)) {
-          event.content.push({
+        if (consecutiveBashFailures >= threshold) {
+          contentModified = true;
+          newContent.push({
             type: "text",
             text: `\n\n⚠️ [CIRCUIT BREAKER TRIGGERED: ${consecutiveBashFailures} Consecutive Failures]\nDo NOT try any more bash commands. Immediately invoke the \`call_advisor\` tool with the error details and your question to receive an architectural fix from Claude Sonnet 5.5.`,
           });
@@ -295,6 +324,10 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
         consecutiveBashFailures = 0;
       }
       setStatusBadge(ctx, ctx.model?.id || "unknown");
+    }
+
+    if (contentModified) {
+      return { content: newContent };
     }
   });
 
