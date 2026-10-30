@@ -1,7 +1,7 @@
 name: kobayashi-workstation
 version: 1.0.0
 
-# 1. Starting Tier: Top-Down Orchestrator (Claude Sonnet 5.5 / GPT-5.6 Luna)
+# 1. Starting Tier: Top-Down Orchestrator (GPT-5.6 Luna via Bedrock Mantle @ $0.22/M)
 starting_tier: orchestrator
 
 # 2. System-1 Router & Escalation Gate
@@ -12,7 +12,7 @@ router:
 
 # 3. Model Hierarchy
 tiers:
-  # Advisor: Frontier reasoning for tough blockers & architecture
+  # Advisor: Frontier reasoning for tough blockers & architecture (Sonnet 5.5 on demand)
   advisor:
     provider: amazon-bedrock
     model: us.anthropic.claude-sonnet-5-5
@@ -32,23 +32,23 @@ tiers:
       cache_read: 0.3
       cache_write: 3.75
 
-  # Orchestrator: Multi-file planning & tickets (currently Sonnet 5.5, easily swapped to SoL/Luna)
+  # Orchestrator: High-speed, high-reasoning coding driver (GPT-5.6 Luna @ 14x cheaper than Sonnet)
   orchestrator:
-    provider: amazon-bedrock
-    model: us.anthropic.claude-sonnet-5-5
-    fallback_model: bedrock-mantle/openai.gpt-5.6-luna
-    thinking: high
-    fallback_thinking: medium
-    name: Claude Sonnet 5.5 (Orchestrator)
+    provider: bedrock-mantle
+    model: openai.gpt-5.6-luna
+    fallback_model: amazon-bedrock/us.anthropic.claude-sonnet-5-5
+    thinking: medium
+    fallback_thinking: high
+    name: GPT-5.6 Luna (Bedrock Mantle Orchestrator)
     context_window: 1000000
     max_tokens: 128000
     reasoning: true
     temperature: 0.2
     cost:
-      input: 3.0
-      output: 15.0
-      cache_read: 0.3
-      cache_write: 3.75
+      input: 0.22
+      output: 1.32
+      cache_read: 0.02
+      cache_write: 0.22
 
   # Workhorse: Primary local model in RAM ($0.00), falls back to Luna if stuck
   workhorse:
