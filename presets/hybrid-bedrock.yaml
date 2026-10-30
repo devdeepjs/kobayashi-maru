@@ -1,0 +1,116 @@
+# ==============================================================================
+# PRESET: HYBRID BEDROCK ENTERPRISE (Recommended Default)
+# Architecture: Claude Sonnet 5.5 (Advisor) + GPT-5.6 Luna (Orchestrator) + Local Ornith 1.5 (Workhorse)
+# Cost Profile: 75% - 95% Cost Reduction vs Claude Code
+# ==============================================================================
+name: "kobayashi-hybrid-bedrock"
+version: "1.0.0"
+starting_tier: "orchestrator"
+
+router:
+  engine: "jev"
+  model: "kev:4b"
+  escalation_threshold: 2
+
+tiers:
+  advisor:
+    provider: "amazon-bedrock"
+    model: "us.anthropic.claude-sonnet-5-5"
+    name: "Claude Sonnet 5.5 (Bedrock Advisor)"
+    fallback_model: "amazon-bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    thinking: "high"
+    fallback_thinking: "high"
+    temperature: 0.2
+    context_window: 1000000
+    max_tokens: 128000
+    reasoning: true
+    mode: "stateless"
+    max_turns_per_task: 2
+    cost:
+      input: 3.0
+      output: 15.0
+      cache_read: 0.3
+      cache_write: 3.75
+    default_for:
+      - "architecture_design"
+      - "root_cause_escalation"
+      - "complex_concurrency"
+
+  orchestrator:
+    provider: "bedrock-mantle"
+    model: "openai.gpt-5.6-luna"
+    name: "GPT-5.6 Luna (Bedrock Mantle Cached Orchestrator)"
+    fallback_model: "amazon-bedrock/us.anthropic.claude-haiku-5-5"
+    thinking: "medium"
+    fallback_thinking: "low"
+    temperature: 0.2
+    context_window: 1050000
+    max_tokens: 65536
+    reasoning: true
+    cost:
+      input: 0.22
+      output: 1.32
+      cache_read: 0.02
+      cache_write: 0.22
+    default_for:
+      - "planning"
+      - "multi_file_edits"
+      - "log_triage"
+      - "hyperdx_query"
+      - "jenkins_deploy"
+
+  workhorse:
+    provider: "ollama"
+    model: "ornith-1.5:ctx"
+    name: "Ornith 1.5 (Local Custom 32K)"
+    fallback_model: "ollama/ornith-1.5:9b"
+    thinking: "low"
+    fallback_thinking: "off"
+    temperature: 0.1
+    context_window: 32768
+    max_tokens: 8192
+    reasoning: true
+    cost:
+      input: 0.0
+      output: 0.0
+      cache_read: 0.0
+      cache_write: 0.0
+    default_for:
+      - "dsa"
+      - "file_search"
+      - "unit_tests"
+      - "boilerplate"
+      - "codebase_reading"
+
+efficiency:
+  sol_pi:
+    action_fusion: true
+    observation_pack: true
+    online_context_compact: true
+    evidence_preserving_reducer: false
+    cache_write_read_ratio: 12.5
+  spill_store:
+    enabled: true
+    threshold_tokens: 1500
+  compaction:
+    reserve_tokens: 6144
+
+security:
+  firewall: "pi-jev-auto-mode"
+  blocked_commands:
+    - "rm -rf /"
+    - "git reset --hard"
+    - "sudo"
+    - "npm publish"
+    - "eval"
+  sandbox: "codemode"
+
+skills:
+  directory: ".agents/skills"
+  loader: "dynamic"
+  auto_detect_slash_commands: true
+  max_header_words: 15
+
+mcp:
+  mode: "deferred"
+  servers: {}

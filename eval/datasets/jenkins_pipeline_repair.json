@@ -1,0 +1,52 @@
+{
+  "id": "task-devops-02",
+  "name": "DevOps: Broken Multi-Branch Jenkins Declarative Pipeline Repair",
+  "category": "devops_infrastructure",
+  "tier_target": "orchestrator",
+  "description": "Fix a corrupted declarative Jenkinsfile pipeline failing due to Docker-in-Docker socket mounting permission denied, broken post-action notification closures, and parallel matrix agent workspace collisions in Kubernetes agent pods.",
+  "complexity": "high",
+  "difficulty": "enterprise-devops",
+  "baseline_metrics": {
+    "claude_code": {
+      "turns": 8,
+      "input_tokens": 34800,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "output_tokens": 2150,
+      "cost_usd": 0.13665,
+      "accuracy": 1.0,
+      "wall_time_s": 44.2
+    },
+    "pi_vanilla": {
+      "turns": 7,
+      "input_tokens": 24100,
+      "cache_read_tokens": 12800,
+      "cache_write_tokens": 5200,
+      "output_tokens": 1820,
+      "cost_usd": 0.10344,
+      "accuracy": 1.0,
+      "wall_time_s": 36.1
+    },
+    "dsh_v4": {
+      "turns": 5,
+      "input_tokens": 16400,
+      "cache_read_tokens": 14200,
+      "cache_write_tokens": 2800,
+      "output_tokens": 1410,
+      "cost_usd": 0.03541,
+      "accuracy": 1.0,
+      "wall_time_s": 27.5
+    },
+    "kobayashi_full": {
+      "turns": 4,
+      "input_tokens": 9800,
+      "cache_read_tokens": 18400,
+      "cache_write_tokens": 2100,
+      "output_tokens": 1150,
+      "cost_usd": 0.00449,
+      "accuracy": 1.0,
+      "wall_time_s": 14.8,
+      "notes": "Routed to Bedrock Mantle GPT-5.6 Luna Cached Orchestrator. 95% prompt cache hit on Jenkins schema; SoL-Pi observation pack stripped Groovy stack trace noise."
+    }
+  }
+}

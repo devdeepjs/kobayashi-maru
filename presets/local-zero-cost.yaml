@@ -1,0 +1,90 @@
+# ==============================================================================
+# PRESET: LOCAL ZERO COST (100% Local Apple Silicon / Ollama)
+# Architecture: Qwen 2.5 Coder 32B (Orchestrator) + Ornith 1.5 (Workhorse)
+# Cost Profile: $0.00 / Zero Cloud Spend / 100% Offline Capable
+# ==============================================================================
+name: "kobayashi-local-zero-cost"
+version: "1.0.0"
+starting_tier: "workhorse"
+
+router:
+  engine: "rule-based"
+  model: "kev:4b"
+  escalation_threshold: 3
+
+tiers:
+  orchestrator:
+    provider: "ollama"
+    model: "qwen2.5-coder:32b"
+    name: "Qwen 2.5 Coder 32B (Local Orchestrator)"
+    thinking: "medium"
+    fallback_thinking: "low"
+    temperature: 0.2
+    context_window: 32768
+    max_tokens: 8192
+    reasoning: true
+    cost:
+      input: 0.0
+      output: 0.0
+      cache_read: 0.0
+      cache_write: 0.0
+    default_for:
+      - "planning"
+      - "architecture_design"
+      - "multi_file_edits"
+
+  workhorse:
+    provider: "ollama"
+    model: "ornith-1.5:ctx"
+    name: "Ornith 1.5 (Local Custom 32K)"
+    fallback_model: "ollama/ornith-1.5:9b"
+    thinking: "low"
+    fallback_thinking: "off"
+    temperature: 0.1
+    context_window: 32768
+    max_tokens: 8192
+    reasoning: true
+    cost:
+      input: 0.0
+      output: 0.0
+      cache_read: 0.0
+      cache_write: 0.0
+    default_for:
+      - "dsa"
+      - "file_search"
+      - "unit_tests"
+      - "boilerplate"
+      - "codebase_reading"
+
+efficiency:
+  sol_pi:
+    action_fusion: true
+    observation_pack: true
+    online_context_compact: true
+    evidence_preserving_reducer: false
+    cache_write_read_ratio: 1.0
+  spill_store:
+    enabled: true
+    threshold_tokens: 1000
+  compaction:
+    reserve_tokens: 4096
+
+security:
+  firewall: "pi-jev-auto-mode"
+  blocked_commands:
+    - "rm -rf /"
+    - "git reset --hard"
+    - "sudo"
+    - "npm publish"
+    - "eval"
+  sandbox: "codemode"
+
+skills:
+  directory: ".agents/skills"
+  loader: "dynamic"
+  auto_detect_slash_commands: true
+  max_header_words: 15
+
+mcp:
+  mode: "deferred"
+  servers: {}

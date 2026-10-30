@@ -1,0 +1,52 @@
+{
+  "id": "task-dsa-01",
+  "name": "DSA: Sliding Window Rate Limiter with Monotonic Queue",
+  "category": "dsa",
+  "tier_target": "workhorse",
+  "description": "Implement a thread-safe sliding window rate limiter in TypeScript that processes up to 100,000 requests per second with strict O(1) amortized time complexity and O(K) space complexity. Must pass unit tests verifying rate enforcement, window expiry, and burst handling.",
+  "complexity": "medium",
+  "difficulty": "leetcode-hard",
+  "baseline_metrics": {
+    "claude_code": {
+      "turns": 6,
+      "input_tokens": 18450,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "output_tokens": 1280,
+      "cost_usd": 0.07455,
+      "accuracy": 1.0,
+      "wall_time_s": 22.4
+    },
+    "pi_vanilla": {
+      "turns": 5,
+      "input_tokens": 12200,
+      "cache_read_tokens": 4800,
+      "cache_write_tokens": 2400,
+      "output_tokens": 940,
+      "cost_usd": 0.05214,
+      "accuracy": 1.0,
+      "wall_time_s": 18.2
+    },
+    "dsh_v4": {
+      "turns": 4,
+      "input_tokens": 8400,
+      "cache_read_tokens": 6200,
+      "cache_write_tokens": 1200,
+      "output_tokens": 820,
+      "cost_usd": 0.01835,
+      "accuracy": 1.0,
+      "wall_time_s": 15.6
+    },
+    "kobayashi_full": {
+      "turns": 3,
+      "input_tokens": 4200,
+      "cache_read_tokens": 3100,
+      "cache_write_tokens": 800,
+      "output_tokens": 710,
+      "cost_usd": 0.00000,
+      "accuracy": 1.0,
+      "wall_time_s": 8.9,
+      "notes": "100% routed to Local Workhorse (Ornith 1.5). Action-fusion collapsed test edit and run into 1 turn. Zero cloud cost."
+    }
+  }
+}

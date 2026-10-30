@@ -1,0 +1,44 @@
+{
+  "name": "@kobayashi/harness",
+  "version": "0.1.0",
+  "description": "Token-efficient, multi-tier agent harness orchestrator for Pi with dynamic skill loading and progressive tool disclosure",
+  "type": "module",
+  "bin": {
+    "kobayashi": "./dist/bin/kobayashi.js"
+  },
+  "scripts": {
+    "start": "tsx bin/kobayashi.ts start",
+    "apply": "tsx bin/kobayashi.ts apply",
+    "doctor": "tsx bin/kobayashi.ts doctor",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "keywords": [
+    "pi",
+    "agent-harness",
+    "token-efficiency",
+    "sol-pi",
+    "prompt-caching",
+    "ollama",
+    "bedrock",
+    "skills"
+  ],
+  "author": "dd",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1160.0",
+    "@aws-sdk/credential-providers": "^3.1160.0",
+    "@inquirer/prompts": "^8.7.5",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "ora": "^8.1.0",
+    "yaml": "^2.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.8.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

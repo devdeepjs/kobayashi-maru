@@ -1,0 +1,53 @@
+{
+  "id": "task-triage-03",
+  "name": "Observability: HyperDX 2,500-Line Log Memory Leak Root Cause Triage",
+  "category": "log_triage",
+  "tier_target": "orchestrator",
+  "description": "Analyze a high-volume 2,500-line JSON log stream exported from HyperDX / OpenTelemetry. Identify a silent connection pool leak where gRPC keepalive timeouts cause thread exhaustion in microservice auth workers under burst traffic.",
+  "complexity": "high",
+  "difficulty": "production-incident",
+  "baseline_metrics": {
+    "claude_code": {
+      "turns": 7,
+      "input_tokens": 142500,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "output_tokens": 2840,
+      "cost_usd": 0.47010,
+      "accuracy": 1.0,
+      "wall_time_s": 68.4,
+      "notes": "Token-maxing trap: Claude Code dumps entire 2,500 raw log lines directly into prompt each turn without log filtering."
+    },
+    "pi_vanilla": {
+      "turns": 6,
+      "input_tokens": 98400,
+      "cache_read_tokens": 42000,
+      "cache_write_tokens": 18000,
+      "output_tokens": 2410,
+      "cost_usd": 0.38145,
+      "accuracy": 1.0,
+      "wall_time_s": 52.1
+    },
+    "dsh_v4": {
+      "turns": 5,
+      "input_tokens": 48200,
+      "cache_read_tokens": 36100,
+      "cache_write_tokens": 9200,
+      "output_tokens": 1950,
+      "cost_usd": 0.09824,
+      "accuracy": 1.0,
+      "wall_time_s": 39.7
+    },
+    "kobayashi_full": {
+      "turns": 3,
+      "input_tokens": 4600,
+      "cache_read_tokens": 12800,
+      "cache_write_tokens": 1400,
+      "output_tokens": 1220,
+      "cost_usd": 0.00288,
+      "accuracy": 1.0,
+      "wall_time_s": 12.3,
+      "notes": "SoL-Pi observation pack stripped 97.4% of repetitive JSON log noise. Spill store offloaded raw dumps to disk. 99.4% cost savings vs Claude Code."
+    }
+  }
+}

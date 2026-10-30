@@ -1,0 +1,122 @@
+# ==============================================================================
+# KOBAYASHI AGENT HARNESS CONFIGURATION
+# Token-efficient, multi-tier agent orchestrator for Pi
+# ==============================================================================
+name: "kobayashi-workstation"
+version: "1.0.0"
+
+# --- 1. STARTING TIER (Turn 1 Planning & Specs) ---
+# Options: "orchestrator" | "advisor" | "workhorse" | "local"
+starting_tier: "orchestrator"
+
+# --- 2. ROUTER & SYSTEM-1 DECISION GATE ---
+router:
+  engine: "jev"                     # "jev" (15ms local Kev/Laya) | "rule-based" | "manual"
+  model: "kev:4b"                   # Local Ollama decision model (~1.8GB RAM, 0% syntax error)
+  escalation_threshold: 2           # Consecutive test failures before routing to Frontier Advisor
+
+# --- 3. 3-TIER MODEL HIERARCHY WITH RESILIENT FALLBACKS ---
+tiers:
+  # Tier 1: Frontier Architectural Advisor (Deep reasoning, specs, tough blockers)
+  advisor:
+    provider: "amazon-bedrock"
+    model: "us.anthropic.claude-sonnet-5-5"
+    name: "Claude Sonnet 5.5 (Bedrock Advisor)"
+    fallback_model: "amazon-bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    thinking: "high"                # 16k-32k reasoning budget for deep architecture
+    fallback_thinking: "high"
+    temperature: 0.2
+    context_window: 1000000
+    max_tokens: 128000
+    reasoning: true
+    mode: "stateless"               # Sends only isolated 500-token summaries
+    max_turns_per_task: 2
+    default_for:
+      - "architecture_design"
+      - "root_cause_escalation"
+      - "complex_concurrency"
+
+  # Tier 2: Cloud High-Speed Cached Orchestrator (Turn 1 planning, 1M context, multi-file tickets)
+  orchestrator:
+    provider: "bedrock-mantle"
+    model: "openai.gpt-5.6-luna"
+    name: "GPT-5.6 Luna (Bedrock Mantle Cached Orchestrator)"
+    fallback_model: "amazon-bedrock/us.anthropic.claude-haiku-5-5"
+    thinking: "medium"              # 2k-4k reasoning budget for rapid plan synthesis
+    fallback_thinking: "low"
+    temperature: 0.2
+    context_window: 1050000
+    max_tokens: 65536
+    reasoning: true
+    cost:
+      input: 0.22                   # $ per 1M tokens
+      output: 1.32
+      cache_read: 0.02              # $0.02 per 1M tokens on cache hit!
+      cache_write: 0.22
+    default_for:
+      - "planning"
+      - "multi_file_edits"
+      - "log_triage"
+      - "hyperdx_query"
+      - "jenkins_deploy"
+
+  # Tier 3: Free Local Workhorse (Mac RAM, 85% routine grep, tests, file edits)
+  workhorse:
+    provider: "ollama"
+    model: "ornith-1.5:ctx"
+    name: "Ornith 1.5 (Local Custom 32K)"
+    fallback_model: "ollama/ornith-1.5:9b"
+    thinking: "low"                 # Minimal/off reasoning for rapid code edits & grep
+    fallback_thinking: "off"
+    temperature: 0.1
+    context_window: 32768
+    max_tokens: 8192
+    reasoning: true
+    cost:
+      input: 0.0
+      output: 0.0
+      cache_read: 0.0
+      cache_write: 0.0
+    default_for:
+      - "dsa"
+      - "file_search"
+      - "unit_tests"
+      - "boilerplate"
+      - "codebase_reading"
+
+# --- 4. TOKEN EFFICIENCY & LOG COMPRESSION ---
+efficiency:
+  sol_pi:
+    action_fusion: true             # Fuses file edit + test run into 1 turn (saves 40% turns)
+    observation_pack: true          # Strips 97% of noise from logs/compiler output
+    online_context_compact: true    # In-loop summarization around milestones
+    evidence_preserving_reducer: false
+    cache_write_read_ratio: 12.5
+  spill_store:
+    enabled: true                   # Offloads dumps >1500 tokens to disk
+    threshold_tokens: 1500
+  compaction:
+    reserve_tokens: 6144            # Maximum context breathing room for 32K local model
+
+# --- 5. SECURITY & ISOLATION ---
+security:
+  firewall: "pi-jev-auto-mode"      # 2-layer firewall (deterministic + semantic decision gate)
+  blocked_commands:
+    - "rm -rf /"
+    - "git reset --hard"
+    - "sudo"
+    - "npm publish"
+    - "eval"
+  sandbox: "codemode"               # QuickJS WebAssembly sandbox for skills & multi-tool queries
+
+# --- 6. SKILLS & MATT POCOCK SUPPORT ---
+skills:
+  directory: ".agents/skills"       # Drop Matt Pocock's skills (to-spec, grill-me, etc.) here
+  loader: "dynamic"                 # Dynamic System-1 loading: 0 tokens on Turn 1 until invoked
+  auto_detect_slash_commands: true  # Typing /to-spec or /grill-me instantly mounts the skill
+  max_header_words: 15              # Keeps description under 15 words to prevent prompt bloat
+
+# --- 7. MCP INTEGRATION (DEFERRED MODE) ---
+mcp:
+  mode: "deferred"                  # Schemas never dumped into Turn 1; executed via QuickJS
+  servers: {}
