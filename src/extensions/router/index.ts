@@ -221,6 +221,22 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       }
 
       const cmd = String(event.input?.command || "");
+
+      // ENFORCE DELEGATION ON CLOUD MODELS:
+      // Block raw multi-file cat/grep dumps that blow up cloud context and force delegation to local Workhorse ($0.00)
+      if (activeTier === "orchestrator" || activeTier === "advisor") {
+        const isBulkCat = /\bcat\s+([^\s;&|]+\s+){2,}/i.test(cmd);
+        const hasMultipleCats = (cmd.match(/\bcat\s+/gi) || []).length >= 2;
+        const isBulkDocRead = /\bcat\s+.*(\.md|README|DOCS|docs\/)/i.test(cmd) && (cmd.includes("&&") || cmd.includes(";") || cmd.includes("|") || isBulkCat);
+
+        if (isBulkCat || hasMultipleCats || isBulkDocRead) {
+          recordLedger({ event: "delegation_enforced", command: cmd.slice(0, 120) });
+          return {
+            block: true,
+            reason: `[KOBAYASHI DELEGATION ENFORCED]: Direct multi-file reading via bash wastes paid cloud context. You MUST delegate this repository exploration task to the local worker by calling \`delegate_workhorse(task: "Inspect and summarize the contents/findings of: ${cmd.slice(0, 80)}")\`. The local worker runs in RAM at $0.00 and returns a concise synthesis.`,
+          };
+        }
+      }
       for (const pat of HARD_BLOCK_PATTERNS) {
         if (pat.test(cmd)) {
           recordLedger({ event: "firewall_block", layer: "L1_Deterministic", command: cmd.slice(0, 120) });
