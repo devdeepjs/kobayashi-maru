@@ -144,14 +144,30 @@ export function compileConfig(config: KobayashiConfig): CompiledPiConfigs {
   }
 
   const settingsJson = {
+    $schema: "https://pi.dev/schemas/settings.schema.json",
     packages: Array.from(new Set(packages)),
     defaultProvider: startingTierModel.provider,
     defaultModel: startingTierModel.model,
-    defaultThinking: startingTierModel.thinking || "medium",
+    defaultThinkingLevel: startingTierModel.thinking || "medium",
     defaultTools,
     enabledModels,
+    cacheWarming: "streaming",
+    showCacheMissNotices: true,
+    quietStartup: "header",
+    doubleEscapeAction: "tree",
+    treeFilterMode: "default",
+    "codemode.mode": "on",
+    "codemode.inlineBudget": 2500,
+    "markdown.mermaid": "streaming",
+    fullscreenCopyOnSelect: true,
     compaction: {
-      reserveTokens: config.efficiency.compaction.reserve_tokens,
+      enabled: true,
+      reserveTokens: config.efficiency.compaction.reserve_tokens || 16384,
+      keepRecentTokens: 20000,
+    },
+    retry: {
+      enabled: true,
+      maxRetries: 3,
     },
   };
 
@@ -189,6 +205,19 @@ export function writePiConfigs(compiled: CompiledPiConfigs): void {
   fs.writeFileSync(settingsPath, JSON.stringify(compiled.settingsJson, null, 2) + "\n");
   fs.writeFileSync(solPiPath, JSON.stringify(compiled.solPiJson, null, 2) + "\n");
   fs.writeFileSync(kobayashiConfigPath, JSON.stringify(compiled.rawConfig, null, 2) + "\n");
+
+  // Synchronize keybindings.json if not present
+  const keybindingsPath = path.join(compiled.targetDir, "keybindings.json");
+  if (!fs.existsSync(keybindingsPath)) {
+    const defaultKeybindings = {
+      $schema: "https://pi.dev/schemas/keybindings.schema.json",
+      "app.session.tree": ["ctrl+t", "alt+t"],
+      "app.session.new": "ctrl+n",
+      "tui.editor.historyPrevious": "alt+up",
+      "tui.editor.historyNext": "alt+down",
+    };
+    fs.writeFileSync(keybindingsPath, JSON.stringify(defaultKeybindings, null, 2) + "\n");
+  }
 
   // Synchronize Kobayashi router extension to ~/.pi/agent/extensions/
   const extDir = path.join(compiled.targetDir, "extensions");
