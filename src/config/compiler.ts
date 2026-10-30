@@ -209,4 +209,33 @@ export function writePiConfigs(compiled: CompiledPiConfigs): void {
       } catch {}
     }
   }
+
+  // Synchronize global Matt Pocock skills to ~/.agents/skills/
+  const userSkillsDir = path.join(os.homedir(), ".agents", "skills");
+  fs.mkdirSync(userSkillsDir, { recursive: true });
+
+  const candidateSkillsDirs = [
+    path.resolve(process.cwd(), ".agents", "skills"),
+    path.join(__dirname, "../../../.agents/skills"),
+    path.join(__dirname, "../../.agents/skills"),
+    path.join(__dirname, "../.agents/skills"),
+  ];
+
+  for (const sDir of candidateSkillsDirs) {
+    if (fs.existsSync(sDir)) {
+      try {
+        const skills = fs.readdirSync(sDir, { withFileTypes: true });
+        for (const skill of skills) {
+          if (skill.isDirectory()) {
+            const srcPath = path.join(sDir, skill.name);
+            const destPath = path.join(userSkillsDir, skill.name);
+            if (!fs.existsSync(destPath)) {
+              fs.cpSync(srcPath, destPath, { recursive: true });
+            }
+          }
+        }
+      } catch {}
+      break;
+    }
+  }
 }

@@ -71,8 +71,8 @@ Benchmarked across 4 real-world enterprise engineering workloads matching the de
 ## 🚀 60-Second Quickstart (Any macOS / Linux Machine)
 
 ```bash
-# 1. Clone Kobayashi
-git clone https://github.com/your-username/kobayashi.git
+# 1. Clone or copy Kobayashi to your machine
+git clone https://github.com/your-username/kobayashi.git # or copy folder
 cd kobayashi
 
 # 2. Run the 1-command bootstrap installer
@@ -83,11 +83,49 @@ kobayashi start
 ```
 
 The bootstrap script will automatically:
-- Verify Node.js (v22+) and Pi coding agent (`@earendil-works/pi-coding-agent`).
+- Verify Node.js (v22+) and install Pi coding agent (`@earendil-works/pi-coding-agent`) globally if missing.
 - Configure Ollama unified memory flags (`OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`).
-- Pull the free local workhorse model (`ornith-1.5:ctx` with 32K context).
+- Pull and bake the free local workhorse model (`ornith-1.5:ctx` with 32K context).
+- Synchronize all 27 Matt Pocock skills globally to `~/.agents/skills/` (available in every project).
 - Link the `kobayashi` binary to your shell PATH.
 - Verify AWS Bedrock credentials and Ollama connection health.
+
+---
+
+## 💻 Setting Up on a Second Laptop (Zero-Friction 3-Step Guide)
+
+To replicate this exact environment onto a second MacBook or Linux workstation without setting up a public GitHub repository:
+
+### Step 1: Transfer the Kobayashi folder
+Transfer the `kobayashi` folder via AirDrop, SCP, or tarball:
+```bash
+# From laptop 1:
+tar -czf kobayashi.tar.gz --exclude="node_modules" --exclude=".git" kobayashi
+# Transfer to laptop 2, then extract:
+tar -xzf kobayashi.tar.gz
+cd kobayashi
+```
+
+### Step 2: Run the automated bootstrap
+```bash
+chmod +x bootstrap.sh
+./bootstrap.sh
+```
+This builds the TypeScript CLI, links `kobayashi` into your global `$PATH`, sets up the 32K Ollama model, and installs all skills to `~/.agents/skills/`.
+
+### Step 3: Configure AWS credentials & verify
+Add your Bedrock credentials to `~/.zshrc` (or `~/.bashrc`):
+```bash
+export AWS_ACCESS_KEY_ID="your_access_key"
+export AWS_SECRET_ACCESS_KEY="your_secret_key"
+export AWS_REGION="us-west-2"
+```
+Reload your shell and run the pre-flight check:
+```bash
+source ~/.zshrc
+kobayashi doctor
+```
+Once all checkmarks are green, you are fully ready to launch with `kobayashi start` anywhere!
 
 ---
 

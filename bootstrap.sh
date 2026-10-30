@@ -97,6 +97,15 @@ npm install --silent
 npm run build --silent || true
 echo -e "${GREEN}✔ Dependencies installed & typecheck passed${RESET}"
 
+# --- 5b. SYNCHRONIZE GLOBAL SKILLS ---
+echo -e "\n${BOLD}[5b/6] Installing Matt Pocock skills globally into ~/.agents/skills...${RESET}"
+mkdir -p "$HOME/.agents/skills"
+if [ -d "$DIR/.agents/skills" ]; then
+  cp -R "$DIR/.agents/skills/"* "$HOME/.agents/skills/" 2>/dev/null || true
+  SKILL_COUNT=$(ls -1 "$HOME/.agents/skills" 2>/dev/null | wc -l | tr -d ' ')
+  echo -e "${GREEN}✔ Synchronized ${SKILL_COUNT} skills globally (available across all projects)${RESET}"
+fi
+
 # --- 6. LINK CLI, APPLY CONFIGS & RUN DIAGNOSTIC ---
 echo -e "\n${BOLD}[6/6] Linking Kobayashi CLI and synchronizing runtime...${RESET}"
 npm link --silent 2>/dev/null || true
