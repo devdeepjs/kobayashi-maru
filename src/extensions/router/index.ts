@@ -391,8 +391,15 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
               activeTier = "workhorse";
               routedBySystem1 = true;
             }
+            if (ctx?.hasUI) {
+              ctx.ui.notify(`[System-1 Router]: Evaluated "${decision}" -> Tier: ${activeTier.toUpperCase()}`, "info");
+            }
           }
-        } catch {}
+        } catch (err: any) {
+          if (ctx?.hasUI) {
+            ctx.ui.notify(`[System-1 Router]: Ollama error (${err.message}), using fallback heuristic`, "warning");
+          }
+        }
       }
 
       // 3. Fallback heuristic if local Ollama is offline or timed out
@@ -413,6 +420,9 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
 
         if (isArchitecturePrompt) {
           activeTier = "advisor";
+          if (ctx?.hasUI) {
+            ctx.ui.notify(`[System-1 Fallback]: Promoted to ADVISOR (architecture keyword matched)`, "info");
+          }
         }
       }
     }
@@ -422,8 +432,8 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       const model = ctx.modelRegistry.find(tierCfg.provider, tierCfg.model);
       if (model && ctx.model?.id !== model.id) {
         await pi.setModel(model);
-        if (ctx.hasUI) {
-          ctx.ui.notify(`Kobayashi: Turn auto-routed to ${activeTier.toUpperCase()} (${tierCfg.model})`, "info");
+        if (ctx?.hasUI) {
+          ctx.ui.notify(`[Kobayashi]: Switched session model to ${tierCfg.provider}/${tierCfg.model}`, "info");
         }
       }
     }
@@ -674,6 +684,86 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
           ],
         };
       }
+    },
+  });
+
+  // --- 8. REGISTER LOCAL WORKHORSE DELEGATION TOOL (TOP-DOWN) ---
+
+  pi.registerTool({
+    name: "delegate_workhorse",
+    label: "Delegate Task to Free Local Workhorse (Ornith 9B)",
+    description:
+      "Statelessly offload local code generation, boilerplate writing, syntax checks, or test execution to the local Ornith 1.5 model running in RAM at $0.00. Use this to perform heavy grunt work without incurring cloud token costs or bloating the main conversation history.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: {
+          type: "string",
+          description: "Clear instructions for the local worker (e.g. 'Generate a ClickHouse SQL migration script for geo risk events' or 'Run pytest and return failing assertions').",
+        },
+        context: {
+          type: "string",
+          description: "Optional code snippet, file path, or schema details needed to complete the task.",
+        },
+      },
+      required: ["task"],
+    },
+    execute: async (
+      _callId: string,
+      params: { task: string; context?: string },
+      _signal: any,
+      _onUpdate: any,
+      ctx: PiContext
+    ) => {
+      const workerModel = workhorseTier.model || "ornith-1.5:ctx";
+      const fullPrompt = `${params.task}\n\nContext:\n${params.context || "None"}\n\nProvide the code or solution concisely:`;
+      try {
+        const res = await fetch("http://localhost:11434/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: workerModel,
+            prompt: fullPrompt,
+            stream: false,
+            options: {
+              temperature: 0.2,
+              num_predict: 2048,
+            },
+          }),
+          signal: AbortSignal.timeout(60000),
+        });
+        if (res.ok) {
+          const data: any = await res.json();
+          const reply = String(data.response || "").trim();
+          recordLedger({
+            event: "workhorse_delegation",
+            model: workerModel,
+            provider: "ollama",
+            actualUsd: 0,
+            sonnetBaselineUsd: Number(((fullPrompt.length / 4 * 3.0 + reply.length / 4 * 15.0) / 1_000_000).toFixed(6)),
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: `[Local Workhorse (${workerModel}) Result ($0.00)]:\n${reply}`,
+              },
+            ],
+          };
+        }
+      } catch (err: any) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `[Local Workhorse Error]: ${err.message}. Orchestrator should complete the task directly.`,
+            },
+          ],
+        };
+      }
+      return {
+        content: [{ type: "text", text: `[Local Workhorse]: No response returned.` }],
+      };
     },
   });
 }

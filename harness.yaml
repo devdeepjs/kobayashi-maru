@@ -1,8 +1,8 @@
 name: kobayashi-workstation
 version: 1.0.0
 
-# 1. Starting Tier: Every session starts on the free local workhorse ($0.00 base)
-starting_tier: workhorse
+# 1. Starting Tier: Top-Down Orchestrator (Claude Sonnet 5.5 / GPT-5.6 Luna)
+starting_tier: orchestrator
 
 # 2. System-1 Router & Escalation Gate
 router:
