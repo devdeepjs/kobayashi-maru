@@ -351,10 +351,13 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
         try {
           const modelName = workhorseTier?.model || "ornith-1.5:ctx";
           const classifyPrompt =
-            `<|im_start|>system\nYou are a classifier. You must output exactly ADVISOR or WORKHORSE.\n` +
-            `- ADVISOR: architecture, tech setup, schemas, high-level planning, trade-offs, dashboard design.\n` +
-            `- WORKHORSE: code edits, file changes, bug fixes, running tests, CLI commands, git.<|im_end|>\n` +
+            `<|im_start|>system\nYou are a task classifier. Output ONLY the word ADVISOR or WORKHORSE.\n\n` +
+            `Rules:\n` +
+            `- ADVISOR: Any question asking "how to", "tell me", "explain", "guide", "what is", or designing a system/architecture/algorithm/new project from scratch.\n` +
+            `- WORKHORSE: Editing existing code in the repository, fixing bugs in files, running tests, bash commands, git.\n<|im_end|>\n` +
             `<|im_start|>user\nTask: git status and run tests<|im_end|>\n` +
+            `<|im_start|>assistant\n<think>\n</think>\nWORKHORSE<|im_end|>\n` +
+            `<|im_start|>user\nTask: fix the null pointer exception in auth.ts<|im_end|>\n` +
             `<|im_start|>assistant\n<think>\n</think>\nWORKHORSE<|im_end|>\n` +
             `<|im_start|>user\nTask: How do we architect ClickHouse for 50M geo logs and what are the trade-offs?<|im_end|>\n` +
             `<|im_start|>assistant\n<think>\n</think>\nADVISOR<|im_end|>\n` +
@@ -395,12 +398,14 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       // 3. Fallback heuristic if local Ollama is offline or timed out
       if (!routedBySystem1) {
         const isArchitecturePrompt =
-          text.includes("how to setup") ||
-          text.includes("how to set up") ||
-          text.includes("how to design") ||
-          text.includes("how to build") ||
-          text.includes("how to make a") ||
+          text.includes("how to") ||
+          text.includes("tell me") ||
+          text.includes("explain") ||
+          text.includes("guide") ||
+          text.includes("from scratch") ||
           text.includes("architecture") ||
+          text.includes("clickhouse") ||
+          text.includes("geo risk") ||
           text.includes("tradeoff") ||
           text.includes("dashboard") ||
           text.includes("pipeline") ||
@@ -413,10 +418,13 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     }
 
     const tierCfg = getTierConfig(activeTier);
-    if (tierCfg && ctx.hasUI) {
+    if (tierCfg) {
       const model = ctx.modelRegistry.find(tierCfg.provider, tierCfg.model);
       if (model && ctx.model?.id !== model.id) {
         await pi.setModel(model);
+        if (ctx.hasUI) {
+          ctx.ui.notify(`Kobayashi: Turn auto-routed to ${activeTier.toUpperCase()} (${tierCfg.model})`, "info");
+        }
       }
     }
 
