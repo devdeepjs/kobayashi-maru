@@ -64,7 +64,7 @@ export const EfficiencySchema = z.object({
 });
 
 export const SecuritySchema = z.object({
-  firewall: z.enum(["pi-jev-auto-mode", "none"]).default("pi-jev-auto-mode"),
+  firewall: z.enum(["local", "none", "pi-jev-auto-mode"]).default("local"),
   blocked_commands: z.array(z.string()).default([
     "rm -rf /",
     "git reset --hard",

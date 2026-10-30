@@ -86,7 +86,6 @@ export function compileConfig(config: KobayashiConfig): CompiledPiConfigs {
   const packages = [
     "git:github.com/NVlabs/SoL-Pi",
     "npm:pi-bedrock-mantle",
-    "npm:pi-jev-auto-mode",
     "npm:pi-usage-dashboard",
     "npm:pi-stats-dashboard",
   ];

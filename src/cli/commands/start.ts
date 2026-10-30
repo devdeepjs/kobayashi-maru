@@ -21,10 +21,6 @@ export async function startCommand(options: {
   // 2. Prepare Pi arguments
   const args: string[] = [];
 
-  if (config.security.firewall === "pi-jev-auto-mode") {
-    args.push("--jev-auto-mode");
-  }
-
   if (options.provider) {
     args.push("--provider", options.provider);
   }

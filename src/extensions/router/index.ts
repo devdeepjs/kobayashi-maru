@@ -66,9 +66,9 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
   };
 
   const orchTier = config?.tiers?.orchestrator || {
-    provider: "bedrock-mantle",
-    model: "openai.gpt-5.6-luna",
-    cost: { input: 0.22, output: 1.32, cache_read: 0.02, cache_write: 0.22 },
+    provider: "amazon-bedrock",
+    model: "us.anthropic.claude-sonnet-5-5",
+    cost: { input: 3.0, output: 15.0, cache_read: 0.3, cache_write: 3.75 },
   };
 
   const workhorseTier = config?.tiers?.workhorse || {
@@ -80,7 +80,7 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
   const localTier = config?.tiers?.local || workhorseTier;
 
   let activeTier: "advisor" | "orchestrator" | "workhorse" | "local" =
-    config?.starting_tier || "orchestrator";
+    config?.starting_tier || "workhorse";
   let consecutiveBashFailures = 0;
   let sessionSavedUsd = 0;
   let sessionActualUsd = 0;
@@ -116,6 +116,34 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
   }
 
   // --- 1. REGISTER CLI / TUI COMMANDS ---
+
+  pi.registerCommand("spec", {
+    description: "Phase 1: Switch to Claude Sonnet 5.5 for high-level architecture, design & specs",
+    handler: async (_args: string, ctx: PiContext) => {
+      activeTier = "advisor";
+      const targetConfig = getTierConfig("advisor");
+      if (targetConfig) {
+        const target = ctx.modelRegistry.find(targetConfig.provider, targetConfig.model);
+        if (target) await pi.setModel(target);
+        ctx.ui.notify(`Phase 1 Active: Claude Sonnet 5.5 (Architecture & Specs)`, "info");
+        setStatusBadge(ctx, targetConfig.model);
+      }
+    },
+  });
+
+  pi.registerCommand("code", {
+    description: "Phase 2: Switch to Ornith ($0.00 local) for code edits, bash & test execution",
+    handler: async (_args: string, ctx: PiContext) => {
+      activeTier = "workhorse";
+      const targetConfig = getTierConfig("workhorse");
+      if (targetConfig) {
+        const target = ctx.modelRegistry.find(targetConfig.provider, targetConfig.model);
+        if (target) await pi.setModel(target);
+        ctx.ui.notify(`Phase 2 Active: Ornith ($0.00 Local Workhorse)`, "info");
+        setStatusBadge(ctx, targetConfig.model);
+      }
+    },
+  });
 
   pi.registerCommand("tier", {
     description: "Switch Kobayashi model tier: /tier [orchestrator | workhorse | advisor | local]",
@@ -174,10 +202,20 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     },
   });
 
-  // --- 2. SECURITY FIREWALL HOOK (Layer 1 + Layer 2) ---
+  // --- 2. CIRCUIT BREAKER & SECURITY FIREWALL (TOOL_CALL) ---
 
   pi.on("tool_call", async (event: any, _ctx: PiContext) => {
     if (event.toolName === "bash") {
+      const threshold = config?.router?.escalation_threshold || 2;
+
+      // ENFORCE CIRCUIT BREAKER: Block 3rd failing bash command and force advisor call
+      if (consecutiveBashFailures >= threshold) {
+        return {
+          block: true,
+          reason: `[CIRCUIT BREAKER ENFORCED]: ${consecutiveBashFailures} consecutive bash executions have failed. Bash execution is locked to prevent token doom loops. You MUST call the \`call_advisor\` tool now with your question and error details to consult Claude Sonnet 5.5 for a working solution.`,
+        };
+      }
+
       const cmd = String(event.input?.command || "");
       for (const pat of HARD_BLOCK_PATTERNS) {
         if (pat.test(cmd)) {
@@ -220,12 +258,39 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     }
   });
 
-  // --- 3. TEST / BASH FAILURE ESCALATION CIRCUIT BREAKER ---
+  // --- 3. TEST / BASH FAILURE TRACKING & IN-LOOP INJECTION (TOOL_RESULT) ---
 
   pi.on("tool_result", async (event: any, ctx: PiContext) => {
     if (event.toolName === "bash") {
-      if (event.isError) {
+      let hasError = Boolean(event.isError);
+
+      // Also check content for fatal/error keywords
+      if (!hasError && Array.isArray(event.content)) {
+        for (const part of event.content) {
+          const str = String(part.text || "").toLowerCase();
+          if (
+            str.includes("command not found") ||
+            str.includes("permission denied") ||
+            str.includes("fatal:") ||
+            str.includes("cannot find module") ||
+            str.includes("blocked") ||
+            str.includes("syntax error")
+          ) {
+            hasError = true;
+            break;
+          }
+        }
+      }
+
+      if (hasError) {
         consecutiveBashFailures++;
+        const threshold = config?.router?.escalation_threshold || 2;
+        if (consecutiveBashFailures >= threshold && Array.isArray(event.content)) {
+          event.content.push({
+            type: "text",
+            text: `\n\n⚠️ [CIRCUIT BREAKER TRIGGERED: ${consecutiveBashFailures} Consecutive Failures]\nDo NOT try any more bash commands. Immediately invoke the \`call_advisor\` tool with the error details and your question to receive an architectural fix from Claude Sonnet 5.5.`,
+          });
+        }
       } else {
         consecutiveBashFailures = 0;
       }
@@ -233,18 +298,85 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     }
   });
 
-  // --- 4. TURN ORCHESTRATION & DYNAMIC TIER SWITCHING ---
+  // --- 4. TURN ORCHESTRATION & DYNAMIC TIER ROUTING ---
 
   pi.on("before_agent_start", async (event: any, ctx: PiContext) => {
     const text = (event.prompt || "").toLowerCase();
 
-    // Check explicit tier overrides in user prompt
-    if (text.includes("[advisor]") || text.includes("/to-spec") || text.includes("/grill-me")) {
+    // 1. Check explicit bracket overrides
+    if (text.includes("[advisor]") || text.includes("/to-spec") || text.includes("/grill-me") || text.includes("[spec]")) {
       activeTier = "advisor";
     } else if (text.includes("[orchestrator]") || text.includes("/implement") || text.includes("/to-tickets")) {
       activeTier = "orchestrator";
-    } else if (text.includes("[workhorse]") || text.includes("[local]") || text.includes("/tdd")) {
+    } else if (text.includes("[workhorse]") || text.includes("[local]") || text.includes("/tdd") || text.includes("[code]")) {
       activeTier = "workhorse";
+    } else {
+      // 2. System-1 Micro-Router: Fast (~40ms) stateless classification via local Ornith
+      let routedBySystem1 = false;
+      const rawPrompt = String(event.prompt || "").trim();
+      if (rawPrompt.length > 5) {
+        try {
+          const modelName = workhorseTier?.model || "ornith-1.5:ctx";
+          const classifyPrompt =
+            `<|im_start|>system\nYou are a classifier. You must output exactly ADVISOR or WORKHORSE.\n` +
+            `- ADVISOR: architecture, tech setup, schemas, high-level planning, trade-offs, dashboard design.\n` +
+            `- WORKHORSE: code edits, file changes, bug fixes, running tests, CLI commands, git.<|im_end|>\n` +
+            `<|im_start|>user\nTask: git status and run tests<|im_end|>\n` +
+            `<|im_start|>assistant\n<think>\n</think>\nWORKHORSE<|im_end|>\n` +
+            `<|im_start|>user\nTask: How do we architect ClickHouse for 50M geo logs and what are the trade-offs?<|im_end|>\n` +
+            `<|im_start|>assistant\n<think>\n</think>\nADVISOR<|im_end|>\n` +
+            `<|im_start|>user\nTask: ${rawPrompt.slice(0, 300)}<|im_end|>\n` +
+            `<|im_start|>assistant\n<think>\n</think>\n`;
+
+          const res = await fetch("http://localhost:11434/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: modelName,
+              prompt: classifyPrompt,
+              raw: true,
+              stream: false,
+              options: {
+                num_predict: 4,
+                temperature: 0,
+                stop: ["<|im_end|>", "\n", " "],
+              },
+            }),
+            signal: AbortSignal.timeout(600),
+          });
+
+          if (res.ok) {
+            const data: any = await res.json();
+            const decision = String(data.response || "").trim().toUpperCase();
+            if (decision.includes("ADVISOR")) {
+              activeTier = "advisor";
+              routedBySystem1 = true;
+            } else if (decision.includes("WORKHORSE")) {
+              activeTier = "workhorse";
+              routedBySystem1 = true;
+            }
+          }
+        } catch {}
+      }
+
+      // 3. Fallback heuristic if local Ollama is offline or timed out
+      if (!routedBySystem1) {
+        const isArchitecturePrompt =
+          text.includes("how to setup") ||
+          text.includes("how to set up") ||
+          text.includes("how to design") ||
+          text.includes("how to build") ||
+          text.includes("how to make a") ||
+          text.includes("architecture") ||
+          text.includes("tradeoff") ||
+          text.includes("dashboard") ||
+          text.includes("pipeline") ||
+          (text.includes("what is") && (text.includes("how to") || text.includes("using it")));
+
+        if (isArchitecturePrompt) {
+          activeTier = "advisor";
+        }
+      }
     }
 
     const tierCfg = getTierConfig(activeTier);
@@ -263,16 +395,16 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     turnsRecordedThisRun = 0;
     setStatusBadge(ctx, pendingTurn.model);
 
-    // If consecutive failures reached threshold, alert agent to escalate to Frontier Advisor
-    const threshold = config?.router?.escalation_threshold || 2;
-    if (consecutiveBashFailures >= threshold) {
-      return {
-        systemPrompt:
-          event.systemPrompt +
-          `\n\n[CIRCUIT BREAKER TRIGGERED: ${consecutiveBashFailures} Consecutive Failures]\n` +
-          `Do NOT continue brute-force trial and error. Immediately call the \`call_advisor\` tool with the exact error output and minimal code snippet (<50 lines) to receive a root-cause fix from Claude Sonnet 5.5 without inflating token cost.`,
-      };
-    }
+    // Inject explicit guidance for local models about call_advisor & switch_tier
+    const guidance =
+      `\n\n[KOBAYASHI HARNESS GUIDELINES]:` +
+      `\n- Active Model: ${pendingTurn.model} (Tier: ${activeTier.toUpperCase()})` +
+      `\n- Frontier Advisor Tool (\`call_advisor\`): If you need architectural guidance, technology explanations, or encounter hard errors, call \`call_advisor\` to consult Claude Sonnet 5.5 statelessly.` +
+      `\n- Tier Switcher Tool (\`switch_tier\`): If this task requires full frontier reasoning across many files, call \`switch_tier\` to promote to 'advisor' or 'orchestrator'.`;
+
+    return {
+      systemPrompt: (event.systemPrompt || "") + guidance,
+    };
   });
 
   // --- 5. EXACT POST-TURN BILLING & SAVINGS ACCOUNTING ---
@@ -293,13 +425,12 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     const cost = tierCfg?.cost || { input: 0.22, output: 1.32, cache_read: 0.02, cache_write: 0.22 };
 
     const actualUsd =
-      (input * (cost.input ?? 0.22) +
-        cacheRead * (cost.cache_read ?? 0.02) +
-        cacheWrite * (cost.cache_write ?? 0.22) +
-        output * (cost.output ?? 1.32)) /
+      (input * (cost.input ?? 0) +
+        cacheRead * (cost.cache_read ?? 0) +
+        cacheWrite * (cost.cache_write ?? 0) +
+        output * (cost.output ?? 0)) /
       1_000_000;
 
-    // Claude Code baseline rate (Claude Sonnet 3.5/3.7 direct pricing: $3/$15, no prompt caching or 1.25x write)
     const claudeCodeBaselineUsd =
       (input * 3.0 + cacheRead * 0.3 + cacheWrite * 3.75 + output * 15.0) / 1_000_000;
 
@@ -326,19 +457,70 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     setStatusBadge(ctx, pendingTurn.model);
   });
 
-  // --- 6. REGISTER STATELESS ADVISOR ESCALATION TOOL ---
+  // --- 6. REGISTER TIER SWITCHING TOOL ---
+
+  pi.registerTool({
+    name: "switch_tier",
+    label: "Switch Kobayashi Agent Tier",
+    description:
+      "Promote or change the active model tier to 'advisor' (Claude Sonnet 5.5), 'orchestrator', or 'workhorse'. Call this when a task is too complex for the local model or when you need frontier cloud reasoning.",
+    parameters: {
+      type: "object",
+      properties: {
+        tier: {
+          type: "string",
+          enum: ["advisor", "orchestrator", "workhorse"],
+          description: "Target tier: 'advisor' (Claude Sonnet 5.5), 'orchestrator', or 'workhorse'.",
+        },
+        reason: {
+          type: "string",
+          description: "1-sentence reason why tier switch is needed.",
+        },
+      },
+      required: ["tier", "reason"],
+    },
+    execute: async (
+      _callId: string,
+      params: { tier: "advisor" | "orchestrator" | "workhorse"; reason: string },
+      _signal: any,
+      _onUpdate: any,
+      ctx: PiContext
+    ) => {
+      activeTier = params.tier;
+      const cfg = getTierConfig(activeTier);
+      if (cfg && ctx?.hasUI) {
+        const m = ctx.modelRegistry.find(cfg.provider, cfg.model);
+        if (m) {
+          await pi.setModel(m);
+          ctx.ui.notify(`Kobayashi: Promoted session to ${activeTier.toUpperCase()} (${cfg.model})`, "info");
+        }
+      }
+      consecutiveBashFailures = 0;
+      setStatusBadge(ctx, cfg?.model || activeTier);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `[Kobayashi]: Successfully switched active tier to ${activeTier.toUpperCase()} (${cfg?.model}). Reason: ${params.reason}`,
+          },
+        ],
+      };
+    },
+  });
+
+  // --- 7. REGISTER STATELESS ADVISOR ESCALATION TOOL ---
 
   pi.registerTool({
     name: "call_advisor",
     label: "Consult Frontier Advisor (Claude Sonnet 5.5)",
     description:
-      "Stateless escalation to Frontier Advisor (Claude Sonnet 5.5 via AWS Bedrock). Use when encountering hard architectural choices, concurrency bugs, or repeated test failures. Transmits an isolated ~500-token problem summary rather than the full session context, saving 95%+ on token costs.",
+      "Stateless escalation to Frontier Advisor (Claude Sonnet 5.5 via AWS Bedrock). Use when encountering hard architectural choices, technology setup questions, concurrency bugs, or repeated test failures. Transmits an isolated ~500-token problem summary rather than the full session context, saving 95%+ on token costs.",
     parameters: {
       type: "object",
       properties: {
         summary: {
           type: "string",
-          description: "Clear 1-2 sentence summary of what the agent is attempting to solve.",
+          description: "Clear 1-2 sentence summary of what is being solved or asked.",
         },
         question: {
           type: "string",
@@ -346,7 +528,7 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
         },
         code_snippet: {
           type: "string",
-          description: "Minimal relevant code snippet (under 50 lines).",
+          description: "Minimal relevant code snippet or error trace (under 50 lines).",
         },
       },
       required: ["summary", "question"],
@@ -358,7 +540,7 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       _onUpdate: any,
       ctx: PiContext
     ) => {
-      const prompt = `You are the Principal Staff Architect Advisor (Stateless Consultation). Provide a surgical diagnosis and exact code solution for the implementation agent.\n\nSummary:\n${params.summary}\n\nQuestion:\n${params.question}${params.code_snippet ? `\n\nCode Snippet:\n\`\`\`\n${params.code_snippet}\n\`\`\`` : ""}`;
+      const prompt = `You are the Principal Staff Architect Advisor (Stateless Consultation). Provide a surgical diagnosis and exact code solution for the implementation agent.\n\nSummary:\n${params.summary}\n\nQuestion:\n${params.question}${params.code_snippet ? `\n\nCode Snippet / Trace:\n\`\`\`\n${params.code_snippet}\n\`\`\`` : ""}`;
       const snippetTokens = Math.ceil(prompt.length / 4);
 
       const recordAdvisor = (replyText: string) => {

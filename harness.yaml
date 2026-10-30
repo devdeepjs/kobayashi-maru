@@ -82,7 +82,7 @@ efficiency:
 
 # 5. Safety Firewall
 security:
-  firewall: pi-jev-auto-mode
+  firewall: local
   blocked_commands:
     - rm -rf /
     - git reset --hard
