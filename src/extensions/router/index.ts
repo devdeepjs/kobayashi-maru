@@ -187,6 +187,8 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
   let pendingTurn: { tier: string; model: string; provider: string } | null = null;
   let turnsRecordedThisRun = 0;
   let lastTurnTokens = 0;
+  const filesReadInRun = new Set<string>();
+  let directReadCountInRun = 0;
 
   function getTierConfig(tierName: "advisor" | "orchestrator" | "workhorse" | "local") {
     switch (tierName) {
@@ -304,6 +306,42 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
   // --- 2. CIRCUIT BREAKER & SECURITY FIREWALL (TOOL_CALL) ---
 
   pi.on("tool_call", async (event: any, _ctx: PiContext) => {
+    if (event.toolName === "read") {
+      const rawPath = String(event.input?.path || "").trim();
+      const normPath = rawPath.replace(/:\d+(-\d+)?$/, "");
+
+      // 1. Prevent duplicate reads of the exact same file in a single turn
+      if (filesReadInRun.has(normPath)) {
+        recordLedger({ event: "duplicate_read_blocked", file: normPath });
+        return {
+          block: true,
+          reason: `[KOBAYASHI CONTEXT SHIELD]: You have ALREADY read "${normPath}" earlier in this turn. Its contents are already present in your conversation context above. Do NOT re-read it. Use the content already provided in your history.`,
+        };
+      }
+
+      // 2. Prevent directory reads that trigger EISDIR errors
+      if (normPath === "docs" || normPath === "platform" || normPath === "src" || normPath === "." || normPath === "./") {
+        return {
+          block: true,
+          reason: `[KOBAYASHI ERROR PREVENTED]: "${normPath}" is a directory, not a file. Direct reads on directories fail with EISDIR. Delegate directory surveys to \`delegate_workhorse\`.`,
+        };
+      }
+
+      // 3. For cloud orchestrator/advisor: cap sequential direct file reads
+      if (activeTier === "orchestrator" || activeTier === "advisor") {
+        directReadCountInRun++;
+        if (directReadCountInRun > 3) {
+          recordLedger({ event: "delegation_enforced", rule: "excessive_direct_reads", file: normPath });
+          return {
+            block: true,
+            reason: `[KOBAYASHI DELEGATION ENFORCED (excessive_direct_reads)]: You have directly read ${directReadCountInRun - 1} files in this turn. Reading multiple files sequentially directly on cloud LLM balloons your context tokens. You MUST delegate the remaining file inspections to the local worker via \`delegate_workhorse(task: "Inspect ${normPath} and summarize...")\`. The local worker runs in local RAM at $0.00.`,
+          };
+        }
+      }
+
+      filesReadInRun.add(normPath);
+    }
+
     if (event.toolName === "bash") {
       const threshold = config?.router?.escalation_threshold || 2;
 
@@ -442,6 +480,8 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
   // --- 4. TURN ORCHESTRATION & DYNAMIC TIER ROUTING ---
 
   pi.on("before_agent_start", async (event: any, ctx: PiContext) => {
+    filesReadInRun.clear();
+    directReadCountInRun = 0;
     const text = (event.prompt || "").toLowerCase();
 
     // 1. Explicit bracket overrides if user requests
@@ -748,7 +788,7 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       ctx: PiContext
     ) => {
       const workerModel = workhorseTier.model || "ornith-1.5:ctx";
-      const fullPrompt = `${params.task}${params.context ? `\n\nContext / Files:\n${params.context}` : ""}\n\nPerform the inspection or code execution and provide a concise synthesis:`;
+      const fullPrompt = `You are the local repository worker with direct read and bash access in this repository. Task: ${params.task}${params.context ? `\n\nContext / Files:\n${params.context}` : ""}\n\nInspect the files directly using your tools and provide a concise synthesis:`;
 
       // 1. Try running an isolated Pi sub-worker with local Ornith (has read/bash tools in current repo at $0.00)
       try {
