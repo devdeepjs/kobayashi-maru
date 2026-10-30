@@ -210,19 +210,33 @@ export function writePiConfigs(compiled: CompiledPiConfigs): void {
     }
   }
 
-  // Synchronize global Matt Pocock skills to ~/.agents/skills/
+  // Synchronize dashboard server script to ~/.pi/agent/exec-dashboard.mjs
+  const candidateDashboardPaths = [
+    path.join(__dirname, "../dashboard/exec-dashboard.mjs"),
+    path.join(__dirname, "../../src/dashboard/exec-dashboard.mjs"),
+    path.resolve(process.cwd(), "src/dashboard/exec-dashboard.mjs"),
+  ];
+  for (const dashSrc of candidateDashboardPaths) {
+    if (fs.existsSync(dashSrc)) {
+      try {
+        fs.copyFileSync(dashSrc, path.join(compiled.targetDir, "exec-dashboard.mjs"));
+        break;
+      } catch {}
+    }
+  }
+
+  // Synchronize global skills only from kobayashi package, avoiding self-collision with consumer repos
   const userSkillsDir = path.join(os.homedir(), ".agents", "skills");
   fs.mkdirSync(userSkillsDir, { recursive: true });
 
   const candidateSkillsDirs = [
-    path.resolve(process.cwd(), ".agents", "skills"),
     path.join(__dirname, "../../../.agents/skills"),
     path.join(__dirname, "../../.agents/skills"),
     path.join(__dirname, "../.agents/skills"),
   ];
 
   for (const sDir of candidateSkillsDirs) {
-    if (fs.existsSync(sDir)) {
+    if (fs.existsSync(sDir) && path.resolve(sDir) !== path.resolve(userSkillsDir)) {
       try {
         const skills = fs.readdirSync(sDir, { withFileTypes: true });
         for (const skill of skills) {

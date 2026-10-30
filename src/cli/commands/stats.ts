@@ -58,9 +58,23 @@ function printCardEmpty(colorHex: string) {
 
 export async function statsCommand(options: { web?: boolean; json?: boolean }): Promise<void> {
   if (options.web) {
-    if (fs.existsSync(EXEC_DASH_SCRIPT)) {
+    let dashScript = fs.existsSync(EXEC_DASH_SCRIPT) ? EXEC_DASH_SCRIPT : null;
+    if (!dashScript) {
+      const candidates = [
+        path.join(__dirname, "../../dashboard/exec-dashboard.mjs"),
+        path.resolve(process.cwd(), "src/dashboard/exec-dashboard.mjs"),
+      ];
+      for (const c of candidates) {
+        if (fs.existsSync(c)) {
+          dashScript = c;
+          break;
+        }
+      }
+    }
+
+    if (dashScript) {
       console.log(chalk.hex("#38bdf8")("Launching Executive & Telemetry Web Dashboard..."));
-      const child = spawn(process.execPath, [EXEC_DASH_SCRIPT], {
+      const child = spawn(process.execPath, [dashScript], {
         detached: true,
         stdio: "ignore",
       });

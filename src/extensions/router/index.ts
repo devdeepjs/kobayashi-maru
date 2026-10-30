@@ -484,30 +484,63 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     directReadCountInRun = 0;
     const text = (event.prompt || "").toLowerCase();
 
-    // 1. Explicit bracket overrides if user requests
+    // 1. Detect explicit prompt bracket/command overrides
+    let explicitSwitch = false;
     if (text.includes("[advisor]") || text.includes("/to-spec") || text.includes("/spec")) {
       activeTier = "advisor";
+      explicitSwitch = true;
     } else if (text.includes("[orchestrator]") || text.includes("/implement") || text.includes("/to-tickets")) {
       activeTier = "orchestrator";
+      explicitSwitch = true;
     } else if (text.includes("[workhorse]") || text.includes("[local]") || text.includes("/tdd") || text.includes("/code")) {
       activeTier = "workhorse";
+      explicitSwitch = true;
     }
 
-    const tierCfg = getTierConfig(activeTier);
-    if (tierCfg) {
-      const model = ctx.modelRegistry.find(tierCfg.provider, tierCfg.model);
-      if (model && ctx.model?.id !== model.id) {
-        await pi.setModel(model);
-        if (ctx?.hasUI) {
-          ctx.ui.notify(`[Kobayashi]: Active model is ${tierCfg.provider}/${tierCfg.model}`, "info");
+    if (explicitSwitch) {
+      // User explicitly requested a tier in this prompt: switch model
+      const tierCfg = getTierConfig(activeTier);
+      if (tierCfg) {
+        const model = ctx.modelRegistry.find(tierCfg.provider, tierCfg.model);
+        if (model && ctx.model?.id !== model.id) {
+          await pi.setModel(model);
+          if (ctx?.hasUI) {
+            ctx.ui.notify(`[Kobayashi]: Switched tier to ${activeTier.toUpperCase()} (${tierCfg.provider}/${tierCfg.model})`, "info");
+          }
         }
+      }
+    } else {
+      // User did NOT specify a tier override: RESPECT the user's active model selection!
+      // If the user changed model via Pi UI (/model, ctrl+p), sync activeTier to match.
+      const curModelId = ctx.model?.id || "";
+      const curProvider = ctx.model?.provider || "";
+      if (
+        curModelId === advisorTier.model ||
+        /sonnet|claude-3-5|claude-sonnet/i.test(curModelId)
+      ) {
+        activeTier = "advisor";
+      } else if (
+        curModelId === workhorseTier.model ||
+        /ornith|qwen|llama/i.test(curModelId) ||
+        curProvider === "ollama"
+      ) {
+        activeTier = "workhorse";
+      } else if (
+        curModelId === orchTier.model ||
+        /luna|gpt-5|gpt-4/i.test(curModelId)
+      ) {
+        activeTier = "orchestrator";
       }
     }
 
+    const tierCfg = getTierConfig(activeTier);
+    const currentModelId = ctx.model?.id || tierCfg?.model || "unknown";
+    const currentProvider = ctx.model?.provider || tierCfg?.provider || "unknown";
+
     pendingTurn = {
       tier: activeTier,
-      model: tierCfg?.model || ctx.model?.id || "unknown",
-      provider: tierCfg?.provider || ctx.model?.provider || "unknown",
+      model: currentModelId,
+      provider: currentProvider,
     };
     turnsRecordedThisRun = 0;
     setStatusBadge(ctx, pendingTurn.model);
