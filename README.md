@@ -86,7 +86,7 @@ The bootstrap script will automatically:
 - Verify Node.js (v22+) and install Pi coding agent (`@earendil-works/pi-coding-agent`) globally if missing.
 - Configure Ollama unified memory flags (`OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`).
 - Pull and bake the free local workhorse model (`ornith-1.5:ctx` with 32K context).
-- Synchronize all 27 Matt Pocock skills globally to `~/.agents/skills/` (available in every project).
+- Synchronize all 38 Matt Pocock skills globally to `~/.agents/skills/` (available across every project with zero startup collision).
 - Link the `kobayashi` binary to your shell PATH.
 - Verify AWS Bedrock credentials and Ollama connection health.
 
@@ -145,6 +145,15 @@ kobayashi apply                # Compile harness.yaml into Pi runtime configs
 kobayashi skills               # Audit installed Matt Pocock skills & test dynamic activation
 kobayashi advisor "question"   # Execute a stateless 1-turn escalation probe to Claude Sonnet
 ```
+
+### 📈 Enterprise Observability & Telemetry HUD (`kobayashi stats --web`)
+
+Running `kobayashi stats --web` launches an enterprise-grade 2-pane telemetry dashboard running locally at `http://127.0.0.1:4200`:
+- **Prompt-Centric Session Explorer**: Displays sessions titled by actual user requests rather than raw UUIDs, with time-ago indicators, token counts, and cost badges.
+- **Light & Dark Mode**: Persistent toggle with GitHub-grade enterprise contrast.
+- **Token Stream & Prompt Cache Breakdown**: Per-turn stacked visualization showing cached reads vs fresh input tokens vs generated output.
+- **Capital Arbitrage Trajectory**: Real-time cumulative spend plotted against Claude Code and vanilla Pi baselines.
+- **Turn-by-Turn Replay Inspector**: Expandable accordion detailing exact model parameters, tool executions, and exact dollar accounting.
 
 ---
 
@@ -262,19 +271,18 @@ kobayashi apply
 
 ---
 
-## 🎯 Progressive Skill Disclosure (Matt Pocock Skills)
+## 🎯 Progressive Skill Disclosure (38 Matt Pocock Skills)
 
-Kobayashi comes bundled with 27 curated skills from [`mattpocock/skills`](https://github.com/mattpocock/skills) in `.agents/skills/`:
+Kobayashi comes bundled with the full suite of 38 curated skills from [`mattpocock/skills`](https://github.com/mattpocock/skills) in `.agents/skills/`:
 * `/to-spec`: Write comprehensive PRD specifications before code implementation.
 * `/grill-me`: Interactive architectural alignment interview.
 * `/to-tickets`: Decompose complex epics into atomic implementation tasks.
 * `/implement`: Execute multi-file code modifications.
 * `/code-review`: Rigorous PR audit.
 * `/tdd`: Strict test-driven development workflow.
+* `/chief-of-staff`, `/research`, `/wizard`, `/wayfinder`, `/pr`, etc.
 
-Unlike standard agents that inject all 27 skill markdown files on Turn 1 (consuming **1,730+ tokens** on every single turn), Kobayashi's dynamic indexer activates skills **only when invoked**:
-* **Turn 1 Token Cost**: **0 tokens**
-* **Active Invocation (`/to-spec`)**: **46 tokens**
+Unlike standard agents that inject all skill markdown files into Turn 1 (consuming **6,000–8,000+ tokens** on every single turn), Kobayashi configures zero-bloat frontmatter (`disable-model-invocation: true`), reducing Turn 1 static prompt overhead by **62.7%** (from 8,880 down to 3,314 tokens) while keeping slash commands immediately available on demand.
 
 ---
 
