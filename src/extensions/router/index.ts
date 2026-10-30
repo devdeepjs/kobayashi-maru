@@ -269,8 +269,8 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     let newContent = Array.isArray(event.content) ? [...event.content] : [];
 
     // Feature A: Hard Tool Output Truncation (Spill Store)
-    // Caps output at ~1500 tokens (6,000 chars) to prevent context window bloat and runaway token bills.
-    const MAX_TOOL_CHARS = config?.compaction?.max_tool_chars || 6000;
+    // Caps output at ~850 tokens (3,500 chars) to prevent multi-call context bloat and runaway token bills.
+    const MAX_TOOL_CHARS = config?.compaction?.max_tool_chars || 3500;
     newContent = newContent.map((part) => {
       if (part.type === "text" && typeof part.text === "string" && part.text.length > MAX_TOOL_CHARS) {
         contentModified = true;
@@ -279,11 +279,11 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
         try {
           writeFileSync(spillFile, part.text, "utf8");
         } catch {}
-        const head = part.text.slice(0, 1500);
-        const tail = part.text.slice(-2500);
+        const head = part.text.slice(0, 800);
+        const tail = part.text.slice(-1800);
         return {
           ...part,
-          text: `${head}\n\n... [TRUNCATED ${fullLen - 4000} CHARACTERS BY KOBAYASHI TO PREVENT CONTEXT BLOAT. Full output saved to: ${spillFile}] ...\n\n${tail}`,
+          text: `${head}\n\n... [TRUNCATED ${fullLen - 2600} CHARACTERS BY KOBAYASHI TO PREVENT CONTEXT BLOAT. Full output saved to: ${spillFile}] ...\n\n${tail}`,
         };
       }
       return part;
