@@ -336,95 +336,13 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
   pi.on("before_agent_start", async (event: any, ctx: PiContext) => {
     const text = (event.prompt || "").toLowerCase();
 
-    // 1. Check explicit bracket overrides
-    if (text.includes("[advisor]") || text.includes("/to-spec") || text.includes("/grill-me") || text.includes("[spec]")) {
+    // 1. Explicit bracket overrides if user requests
+    if (text.includes("[advisor]") || text.includes("/to-spec") || text.includes("/spec")) {
       activeTier = "advisor";
     } else if (text.includes("[orchestrator]") || text.includes("/implement") || text.includes("/to-tickets")) {
       activeTier = "orchestrator";
-    } else if (text.includes("[workhorse]") || text.includes("[local]") || text.includes("/tdd") || text.includes("[code]")) {
+    } else if (text.includes("[workhorse]") || text.includes("[local]") || text.includes("/tdd") || text.includes("/code")) {
       activeTier = "workhorse";
-    } else {
-      // 2. System-1 Micro-Router: Fast (~40ms) stateless classification via local Ornith
-      let routedBySystem1 = false;
-      const rawPrompt = String(event.prompt || "").trim();
-      if (rawPrompt.length > 5) {
-        try {
-          const modelName = workhorseTier?.model || "ornith-1.5:ctx";
-          const classifyPrompt =
-            `<|im_start|>system\nYou are a task classifier. Output ONLY the word ADVISOR or WORKHORSE.\n\n` +
-            `Rules:\n` +
-            `- ADVISOR: Any question asking "how to", "tell me", "explain", "guide", "what is", or designing a system/architecture/algorithm/new project from scratch.\n` +
-            `- WORKHORSE: Editing existing code in the repository, fixing bugs in files, running tests, bash commands, git.\n<|im_end|>\n` +
-            `<|im_start|>user\nTask: git status and run tests<|im_end|>\n` +
-            `<|im_start|>assistant\n<think>\n</think>\nWORKHORSE<|im_end|>\n` +
-            `<|im_start|>user\nTask: fix the null pointer exception in auth.ts<|im_end|>\n` +
-            `<|im_start|>assistant\n<think>\n</think>\nWORKHORSE<|im_end|>\n` +
-            `<|im_start|>user\nTask: How do we architect ClickHouse for 50M geo logs and what are the trade-offs?<|im_end|>\n` +
-            `<|im_start|>assistant\n<think>\n</think>\nADVISOR<|im_end|>\n` +
-            `<|im_start|>user\nTask: ${rawPrompt.slice(0, 300)}<|im_end|>\n` +
-            `<|im_start|>assistant\n<think>\n</think>\n`;
-
-          const res = await fetch("http://localhost:11434/api/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: modelName,
-              prompt: classifyPrompt,
-              raw: true,
-              stream: false,
-              options: {
-                num_predict: 4,
-                temperature: 0,
-                stop: ["<|im_end|>", "\n", " "],
-              },
-            }),
-            signal: AbortSignal.timeout(600),
-          });
-
-          if (res.ok) {
-            const data: any = await res.json();
-            const decision = String(data.response || "").trim().toUpperCase();
-            if (decision.includes("ADVISOR")) {
-              activeTier = "advisor";
-              routedBySystem1 = true;
-            } else if (decision.includes("WORKHORSE")) {
-              activeTier = "workhorse";
-              routedBySystem1 = true;
-            }
-            if (ctx?.hasUI) {
-              ctx.ui.notify(`[System-1 Router]: Evaluated "${decision}" -> Tier: ${activeTier.toUpperCase()}`, "info");
-            }
-          }
-        } catch (err: any) {
-          if (ctx?.hasUI) {
-            ctx.ui.notify(`[System-1 Router]: Ollama error (${err.message}), using fallback heuristic`, "warning");
-          }
-        }
-      }
-
-      // 3. Fallback heuristic if local Ollama is offline or timed out
-      if (!routedBySystem1) {
-        const isArchitecturePrompt =
-          text.includes("how to") ||
-          text.includes("tell me") ||
-          text.includes("explain") ||
-          text.includes("guide") ||
-          text.includes("from scratch") ||
-          text.includes("architecture") ||
-          text.includes("clickhouse") ||
-          text.includes("geo risk") ||
-          text.includes("tradeoff") ||
-          text.includes("dashboard") ||
-          text.includes("pipeline") ||
-          (text.includes("what is") && (text.includes("how to") || text.includes("using it")));
-
-        if (isArchitecturePrompt) {
-          activeTier = "advisor";
-          if (ctx?.hasUI) {
-            ctx.ui.notify(`[System-1 Fallback]: Promoted to ADVISOR (architecture keyword matched)`, "info");
-          }
-        }
-      }
     }
 
     const tierCfg = getTierConfig(activeTier);
@@ -433,7 +351,7 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       if (model && ctx.model?.id !== model.id) {
         await pi.setModel(model);
         if (ctx?.hasUI) {
-          ctx.ui.notify(`[Kobayashi]: Switched session model to ${tierCfg.provider}/${tierCfg.model}`, "info");
+          ctx.ui.notify(`[Kobayashi]: Active model is ${tierCfg.provider}/${tierCfg.model}`, "info");
         }
       }
     }
@@ -446,12 +364,18 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     turnsRecordedThisRun = 0;
     setStatusBadge(ctx, pendingTurn.model);
 
-    // Inject explicit guidance for local models about call_advisor & switch_tier
-    const guidance =
-      `\n\n[KOBAYASHI HARNESS GUIDELINES]:` +
-      `\n- Active Model: ${pendingTurn.model} (Tier: ${activeTier.toUpperCase()})` +
-      `\n- Frontier Advisor Tool (\`call_advisor\`): If you need architectural guidance, technology explanations, or encounter hard errors, call \`call_advisor\` to consult Claude Sonnet 5.5 statelessly.` +
-      `\n- Tier Switcher Tool (\`switch_tier\`): If this task requires full frontier reasoning across many files, call \`switch_tier\` to promote to 'advisor' or 'orchestrator'.`;
+    // Dynamic guidance based on whether the active model is Orchestrator or Workhorse
+    let guidance = `\n\n[KOBAYASHI HARNESS GUIDELINES]: Active Tier: ${activeTier.toUpperCase()} (${pendingTurn.model})`;
+    if (activeTier === "orchestrator" || activeTier === "advisor") {
+      guidance +=
+        `\n- Role: You are the Principal Staff Engineer Orchestrator. You reason, design system architectures, conduct technical Q&A, and align project specifications.` +
+        `\n- Token-Efficient Worker Delegation (\`delegate_workhorse\`): For broad repo exploration, reading multiple documentation/markdown files, grepping, or running tests: DELEGATE the exploration task to \`delegate_workhorse\`. It runs locally on the free Ornith model in RAM at $0.00 and returns a synthesized summary so you do not burn paid tokens dumping raw file dumps into context.` +
+        `\n- Only read or edit specific files directly when you need to make surgical changes.`;
+    } else {
+      guidance +=
+        `\n- Frontier Advisor Tool (\`call_advisor\`): If you encounter hard architectural choices or repeated test failures, call \`call_advisor\` to consult Claude Sonnet 5.5 statelessly.` +
+        `\n- Tier Switcher Tool (\`switch_tier\`): If this task requires full frontier reasoning, call \`switch_tier\` to promote to 'orchestrator'.`;
+    }
 
     return {
       systemPrompt: (event.systemPrompt || "") + guidance,
@@ -716,7 +640,36 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       ctx: PiContext
     ) => {
       const workerModel = workhorseTier.model || "ornith-1.5:ctx";
-      const fullPrompt = `${params.task}\n\nContext:\n${params.context || "None"}\n\nProvide the code or solution concisely:`;
+      const fullPrompt = `${params.task}${params.context ? `\n\nContext / Files:\n${params.context}` : ""}\n\nPerform the inspection or code execution and provide a concise synthesis:`;
+
+      // 1. Try running an isolated Pi sub-worker with local Ornith (has read/bash tools in current repo at $0.00)
+      try {
+        const { stdout, stderr } = await execFileAsync(
+          "pi",
+          ["--no-session", "--model", `ollama/${workerModel}`, "-p", fullPrompt],
+          { env: process.env, timeout: 60000, maxBuffer: 2 * 1024 * 1024 }
+        );
+        const reply = (stdout || stderr || "").trim();
+        if (reply) {
+          recordLedger({
+            event: "workhorse_delegation",
+            model: workerModel,
+            provider: "ollama",
+            actualUsd: 0,
+            sonnetBaselineUsd: Number(((fullPrompt.length / 4 * 3.0 + reply.length / 4 * 15.0) / 1_000_000).toFixed(6)),
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: `[Local Workhorse (${workerModel}) Synthesis ($0.00)]:\n${reply}`,
+              },
+            ],
+          };
+        }
+      } catch {}
+
+      // 2. Fallback to direct Ollama HTTP generation if sub-process fails
       try {
         const res = await fetch("http://localhost:11434/api/generate", {
           method: "POST",
@@ -730,7 +683,7 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
               num_predict: 2048,
             },
           }),
-          signal: AbortSignal.timeout(60000),
+          signal: AbortSignal.timeout(30000),
         });
         if (res.ok) {
           const data: any = await res.json();
