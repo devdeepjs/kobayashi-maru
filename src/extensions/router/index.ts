@@ -1,10 +1,38 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { appendFileSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 
 const execFileAsync = promisify(execFile);
+
+function runPiWorker(args: string[], timeoutMs = 60000): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("pi", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`Worker timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    child.stdout.on("data", (d) => (stdout += d));
+    child.stderr.on("data", (d) => (stderr += d));
+
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+
+    child.on("close", () => {
+      clearTimeout(timer);
+      resolve({ stdout, stderr });
+    });
+  });
+}
 const PI_DIR = join(homedir(), ".pi", "agent");
 const LEDGER_PATH = join(PI_DIR, "savings-ledger.jsonl");
 const CONFIG_PATH = join(PI_DIR, "kobayashi-config.json");
@@ -724,12 +752,26 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
 
       // 1. Try running an isolated Pi sub-worker with local Ornith (has read/bash tools in current repo at $0.00)
       try {
-        const { stdout, stderr } = await execFileAsync(
-          "pi",
-          ["--no-session", "--model", `ollama/${workerModel}`, "-p", fullPrompt],
-          { env: process.env, timeout: 60000, maxBuffer: 2 * 1024 * 1024 }
+        const { stdout, stderr } = await runPiWorker(
+          [
+            "--no-extensions",
+            "--no-session",
+            "--model", `ollama/${workerModel}`,
+            "--tools", "read,bash",
+            "-p", fullPrompt,
+          ],
+          60000
         );
-        const reply = (stdout || stderr || "").trim();
+        const raw = (stdout || stderr || "").trim();
+        const reply = raw
+          .split("\n")
+          .filter(
+            (line) =>
+              !line.startsWith("[bedrock-mantle]") &&
+              !line.startsWith("Warning:")
+          )
+          .join("\n")
+          .trim();
         if (reply) {
           recordLedger({
             event: "workhorse_delegation",
