@@ -39,10 +39,13 @@ function formatModelChoice(m: DiscoveredModel): SearchChoice {
 
 export async function configCommand(options: {
   advisor?: string;
+  advisorThinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   advisorFallback?: string;
   orchestrator?: string;
+  orchestratorThinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   orchestratorFallback?: string;
   workhorse?: string;
+  workhorseThinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   workhorseFallback?: string;
   startingTier?: "advisor" | "orchestrator" | "workhorse";
 }): Promise<void> {
@@ -144,11 +147,35 @@ export async function configCommand(options: {
     });
   };
 
+  type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+  const promptThinkingLevel = async (
+    roleTitle: string,
+    defaultLevel: ThinkingLevel
+  ): Promise<ThinkingLevel> => {
+    return await select<ThinkingLevel>({
+      message: `Default thinking / reasoning level for ${roleTitle}:`,
+      default: defaultLevel,
+      choices: [
+        { name: "high    (16k-32k tokens: Deep architectural reasoning & tricky debugging)", value: "high" },
+        { name: "medium  (2k-4k tokens: Balanced planning & multi-file synthesis)", value: "medium" },
+        { name: "low     (500-1k tokens: Fast execution, minimal reasoning tokens)", value: "low" },
+        { name: "off     (0 tokens: Direct instant response, zero reasoning tokens)", value: "off" },
+        { name: "minimal (100-250 tokens: Ultra-brief reasoning)", value: "minimal" },
+        { name: "xhigh   (32k-64k tokens: Extended reasoning budget)", value: "xhigh" },
+        { name: "max     (Maximum reasoning budget supported by model)", value: "max" },
+      ],
+    });
+  };
+
   let selectedAdvisor = options.advisor;
+  let selectedAdvisorThinking = options.advisorThinking;
   let selectedAdvisorFallback = options.advisorFallback;
   let selectedOrchestrator = options.orchestrator;
+  let selectedOrchestratorThinking = options.orchestratorThinking;
   let selectedOrchestratorFallback = options.orchestratorFallback;
   let selectedWorkhorse = options.workhorse;
+  let selectedWorkhorseThinking = options.workhorseThinking;
   let selectedWorkhorseFallback = options.workhorseFallback;
   let selectedStartingTier = options.startingTier;
 
@@ -158,6 +185,12 @@ export async function configCommand(options: {
       "Primary Frontier Advisor (Turn 1 specs & tough blockers)",
       priorityAdvisorIds,
       "amazon-bedrock/us.anthropic.claude-sonnet-5-5"
+    );
+  }
+  if (!selectedAdvisorThinking) {
+    selectedAdvisorThinking = await promptThinkingLevel(
+      `Advisor (${selectedAdvisor})`,
+      currentConfig.tiers.advisor?.thinking || "high"
     );
   }
   if (!selectedAdvisorFallback) {
@@ -176,6 +209,12 @@ export async function configCommand(options: {
       "bedrock-mantle/openai.gpt-5.6-luna"
     );
   }
+  if (!selectedOrchestratorThinking) {
+    selectedOrchestratorThinking = await promptThinkingLevel(
+      `Orchestrator (${selectedOrchestrator})`,
+      currentConfig.tiers.orchestrator?.thinking || "medium"
+    );
+  }
   if (!selectedOrchestratorFallback) {
     selectedOrchestratorFallback = await promptSearchModel(
       "Fallback Orchestrator (Used if primary throttles / 429)",
@@ -190,6 +229,12 @@ export async function configCommand(options: {
       "Primary Workhorse (Routine tests, grep, local edits)",
       priorityWorkhorseIds,
       "ollama/ornith-1.5:ctx"
+    );
+  }
+  if (!selectedWorkhorseThinking) {
+    selectedWorkhorseThinking = await promptThinkingLevel(
+      `Workhorse (${selectedWorkhorse})`,
+      currentConfig.tiers.workhorse?.thinking || "low"
     );
   }
   if (!selectedWorkhorseFallback) {
@@ -244,10 +289,13 @@ export async function configCommand(options: {
         provider: advParsed.provider,
         model: advParsed.model,
         fallback_model: selectedAdvisorFallback,
+        thinking: selectedAdvisorThinking || "high",
+        fallback_thinking: selectedAdvisorThinking || "high",
         name: `Advisor (${advParsed.model})`,
         context_window: 1000000,
         max_tokens: 128000,
         reasoning: true,
+        temperature: 0.2,
         mode: "stateless",
         max_turns_per_task: 2,
       },
@@ -255,18 +303,24 @@ export async function configCommand(options: {
         provider: orchParsed.provider,
         model: orchParsed.model,
         fallback_model: selectedOrchestratorFallback,
+        thinking: selectedOrchestratorThinking || "medium",
+        fallback_thinking: "low",
         name: `Orchestrator (${orchParsed.model})`,
         context_window: 1050000,
         max_tokens: 65536,
         reasoning: true,
+        temperature: 0.2,
         cost: { input: 0.22, output: 1.32, cache_read: 0.02, cache_write: 0.22 },
       },
       workhorse: {
         provider: wrkParsed.provider,
         model: wrkParsed.model,
         fallback_model: selectedWorkhorseFallback,
+        thinking: selectedWorkhorseThinking || "low",
+        fallback_thinking: "off",
         name: `Workhorse (${wrkParsed.model})`,
         context_window: 32768,
+        temperature: 0.1,
         cost: { input: 0.0, output: 0.0, cache_read: 0.0, cache_write: 0.0 },
       },
     },
@@ -282,13 +336,13 @@ export async function configCommand(options: {
   console.log(chalk.bold.green("\n✔ Multi-Tier Hierarchy with Resilient Fallbacks Active!"));
   console.log(`  • Starting Tier: ${chalk.bold.magenta(selectedStartingTier.toUpperCase())}`);
   console.log(
-    `  • Advisor:       ${chalk.cyan(selectedAdvisor)} ${chalk.dim(`(Fallback: ${selectedAdvisorFallback})`)}`
+    `  • Advisor:       ${chalk.cyan(selectedAdvisor)} [thinking: ${chalk.yellow(selectedAdvisorThinking)}] ${chalk.dim(`(Fallback: ${selectedAdvisorFallback})`)}`
   );
   console.log(
-    `  • Orchestrator:  ${chalk.cyan(selectedOrchestrator)} ${chalk.dim(`(Fallback: ${selectedOrchestratorFallback})`)}`
+    `  • Orchestrator:  ${chalk.cyan(selectedOrchestrator)} [thinking: ${chalk.yellow(selectedOrchestratorThinking)}] ${chalk.dim(`(Fallback: ${selectedOrchestratorFallback})`)}`
   );
   console.log(
-    `  • Workhorse:     ${chalk.cyan(selectedWorkhorse)} ${chalk.dim(`(Fallback: ${selectedWorkhorseFallback})`)}`
+    `  • Workhorse:     ${chalk.cyan(selectedWorkhorse)} [thinking: ${chalk.yellow(selectedWorkhorseThinking)}] ${chalk.dim(`(Fallback: ${selectedWorkhorseFallback})`)}`
   );
   console.log(chalk.dim("\nTip: Press Ctrl+P inside Pi anytime to switch seamlessly between these models."));
 }

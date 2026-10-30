@@ -26,10 +26,13 @@ program
   .command("config")
   .description("Interactive model tier wizard (Advisor, Orchestrator, Workhorse & Fallbacks)")
   .option("-a, --advisor <model>", "Primary Advisor model (provider/model)")
+  .option("--advisor-thinking <level>", "Advisor thinking level ('high' | 'medium' | 'low' | 'off')")
   .option("--advisor-fallback <model>", "Fallback Advisor model (provider/model)")
   .option("-o, --orchestrator <model>", "Primary Orchestrator model (provider/model)")
+  .option("--orchestrator-thinking <level>", "Orchestrator thinking level ('high' | 'medium' | 'low' | 'off')")
   .option("--orchestrator-fallback <model>", "Fallback Orchestrator model (provider/model)")
   .option("-w, --workhorse <model>", "Primary Workhorse model (provider/model)")
+  .option("--workhorse-thinking <level>", "Workhorse thinking level ('high' | 'medium' | 'low' | 'off')")
   .option("--workhorse-fallback <model>", "Fallback Workhorse model (provider/model)")
   .option("-s, --starting-tier <tier>", "Starting tier ('advisor' | 'orchestrator' | 'workhorse')")
   .action(configCommand);

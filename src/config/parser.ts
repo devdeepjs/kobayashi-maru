@@ -1,8 +1,12 @@
 import fs from "fs";
 import path from "path";
 import yaml from "yaml";
+import { fileURLToPath } from "url";
 import { KobayashiConfig, KobayashiConfigSchema } from "./schema.js";
 import { DEFAULT_CONFIG } from "./defaults.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Expands environment variables matching ${VAR_NAME} or $VAR_NAME
@@ -18,11 +22,16 @@ function expandEnvVars(raw: string): string {
  * Loads and validates a harness.yaml configuration file
  */
 export function loadConfig(configPath?: string): KobayashiConfig {
-  const resolvedPath = configPath
-    ? path.resolve(configPath)
-    : path.resolve(process.cwd(), "harness.yaml");
+  const candidatePaths = [
+    configPath ? path.resolve(configPath) : undefined,
+    path.resolve(process.cwd(), "harness.yaml"),
+    path.resolve(__dirname, "../../harness.yaml"),
+    path.resolve(__dirname, "../../../harness.yaml"),
+  ].filter((p): p is string => Boolean(p));
 
-  if (!fs.existsSync(resolvedPath)) {
+  const resolvedPath = candidatePaths.find((p) => fs.existsSync(p));
+
+  if (!resolvedPath) {
     return DEFAULT_CONFIG;
   }
 
