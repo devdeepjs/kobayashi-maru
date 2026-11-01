@@ -97,7 +97,7 @@ export function compileConfig(config: KobayashiConfig): CompiledPiConfigs {
 
   const VALID_THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
   function withThinking(id: string, thinking?: string): string {
-    if (!thinking) return id;
+    if (!thinking || id.startsWith("bedrock-mantle/")) return id;
     if (VALID_THINKING.some((lvl) => id.endsWith(`:${lvl}`))) {
       return id;
     }

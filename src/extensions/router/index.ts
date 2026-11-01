@@ -484,33 +484,12 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       const rawPath = String(event.input?.path || "").trim();
       const normPath = rawPath.replace(/:\d+(-\d+)?$/, "");
 
-      // 1. Prevent duplicate reads of the exact same file in a single turn
-      if (filesReadInRun.has(normPath)) {
-        recordLedger({ event: "duplicate_read_blocked", file: normPath });
-        return {
-          block: true,
-          reason: `[KOBAYASHI CONTEXT SHIELD]: You have ALREADY read "${normPath}" earlier in this turn. Its contents are already present in your conversation context above. Do NOT re-read it. Use the content already provided in your history.`,
-        };
-      }
-
-      // 2. Prevent directory reads that trigger EISDIR errors
+      // Prevent directory reads that trigger EISDIR errors
       if (normPath === "docs" || normPath === "platform" || normPath === "src" || normPath === "." || normPath === "./") {
         return {
           block: true,
-          reason: `[KOBAYASHI ERROR PREVENTED]: "${normPath}" is a directory, not a file. Direct reads on directories fail with EISDIR. Delegate directory surveys to \`delegate_workhorse\`.`,
+          reason: `[KOBAYASHI PREVENTED EISDIR]: "${normPath}" is a directory, not a file. Use \`bash\` (e.g. \`ls ${normPath}\` or \`find ${normPath}\`) to inspect directories.`,
         };
-      }
-
-      // 3. For cloud orchestrator/advisor: cap sequential direct file reads
-      if (activeTier === "orchestrator" || activeTier === "advisor") {
-        directReadCountInRun++;
-        if (directReadCountInRun > 3) {
-          recordLedger({ event: "delegation_enforced", rule: "excessive_direct_reads", file: normPath });
-          return {
-            block: true,
-            reason: `[KOBAYASHI DELEGATION ENFORCED (excessive_direct_reads)]: You have directly read ${directReadCountInRun - 1} files in this turn. Reading multiple files sequentially directly on cloud LLM balloons your context tokens. You MUST delegate the remaining file inspections to the local worker via \`delegate_workhorse(task: "Inspect ${normPath} and summarize...")\`. The local worker runs in local RAM at $0.00.`,
-          };
-        }
       }
 
       filesReadInRun.add(normPath);
@@ -519,7 +498,7 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     if (event.toolName === "bash") {
       const threshold = config?.router?.escalation_threshold || 2;
 
-      // ENFORCE CIRCUIT BREAKER: Block 3rd failing bash command and force advisor call
+      // ENFORCE CIRCUIT BREAKER: Alert on consecutive failing bash commands
       if (consecutiveBashFailures >= threshold) {
         return {
           block: true,
@@ -529,18 +508,6 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
 
       const cmd = String(event.input?.command || "");
 
-      // ENFORCE DELEGATION ON CLOUD MODELS:
-      // Microsecond inspection (~0.002ms) to block bulk file/doc reading and force delegation to local Workhorse ($0.00)
-      if (activeTier === "orchestrator" || activeTier === "advisor") {
-        const check = checkBulkExploration(cmd);
-        if (check.isBulk) {
-          recordLedger({ event: "delegation_enforced", rule: check.reason, command: cmd.slice(0, 120) });
-          return {
-            block: true,
-            reason: `[KOBAYASHI DELEGATION ENFORCED (${check.reason})]: Direct multi-file reading via bash wastes paid cloud context. You MUST delegate this repository exploration task to the local worker by calling \`delegate_workhorse(task: "Inspect and summarize the contents/findings of: ${cmd.slice(0, 80)}")\`. The local worker runs in RAM at $0.00 and returns a concise synthesis.`,
-          };
-        }
-      }
       for (const pat of HARD_BLOCK_PATTERNS) {
         if (pat.test(cmd)) {
           recordLedger({ event: "firewall_block", layer: "L1_Deterministic", command: cmd.slice(0, 120) });
@@ -1029,7 +996,7 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
           )
           .join("\n")
           .trim();
-        if (reply) {
+        if (reply && !reply.toLowerCase().includes("connection error")) {
           recordLedger({
             event: "workhorse_delegation",
             model: workerModel,
@@ -1067,34 +1034,33 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
         if (res.ok) {
           const data: any = await res.json();
           const reply = String(data.response || "").trim();
-          recordLedger({
-            event: "workhorse_delegation",
-            model: workerModel,
-            provider: "ollama",
-            actualUsd: 0,
-            sonnetBaselineUsd: Number(((fullPrompt.length / 4 * 3.0 + reply.length / 4 * 15.0) / 1_000_000).toFixed(6)),
-          });
-          return {
-            content: [
-              {
-                type: "text",
-                text: `[Local Workhorse (${workerModel}) Result ($0.00)]:\n${reply}`,
-              },
-            ],
-          };
+          if (reply && !reply.toLowerCase().includes("connection error")) {
+            recordLedger({
+              event: "workhorse_delegation",
+              model: workerModel,
+              provider: "ollama",
+              actualUsd: 0,
+              sonnetBaselineUsd: Number(((fullPrompt.length / 4 * 3.0 + reply.length / 4 * 15.0) / 1_000_000).toFixed(6)),
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `[Local Workhorse (${workerModel}) Result ($0.00)]:\n${reply}`,
+                },
+              ],
+            };
+          }
         }
-      } catch (err: any) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `[Local Workhorse Error]: ${err.message}. Orchestrator should complete the task directly.`,
-            },
-          ],
-        };
-      }
+      } catch (err: any) {}
+
       return {
-        content: [{ type: "text", text: `[Local Workhorse]: No response returned.` }],
+        content: [
+          {
+            type: "text",
+            text: `[Local Workhorse Unavailable]: Local Ollama worker is currently offline or unreachable. Proceed to inspect the repository directly using your built-in \`read\` and \`bash\` tools.`,
+          },
+        ],
       };
     },
   });
