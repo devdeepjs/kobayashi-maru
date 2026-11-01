@@ -13,7 +13,7 @@
 [![Local Workhorse: $0.00 Compute](https://img.shields.io/badge/Local%20Workhorse-%240.00%20Compute-blueviolet)](#pillar-4-hybrid-powertrain--dual-virtual-router-bottom-up-routerts)
 
 ```text
-    __ __ obayashi  __  ___                 
+    __ __                    
    / //_/          /  |/  /___ _ _____ __  __
   / ,<    ____    / /|_/ // __ `// ___// / / /
  / /| |  /___/   / /  / // /_/ // /   / /_/ / 
@@ -122,7 +122,78 @@ Evaluated across real-world enterprise engineering workloads (large-scale TypeSc
 
 ---
 
-## 🚀 1-Command Installation
+## 🛠️ The Bundled Matt Pocock 38-Skill Suite
+
+Kobayashi Maru comes pre-packaged with the complete **38-skill Matt Pocock engineering suite** located in [`.agents/skills/`](.agents/skills/). Every skill is zero-bloat ready and instantly discoverable by Okapi BM25 without paying startup token costs.
+
+### Skill Categories & Triggers
+
+| Category | Skill Name | Slash Trigger | Purpose & When It Is Injected |
+| :--- | :--- | :---: | :--- |
+| **TDD & Engineering** | `tdd` | `/tdd` | Red-Green-Refactor test cycle. Automatically injected for `"write tests"`, `"test suite"`, `"vitest"`. |
+| | `implement` | `/implement` | Standardized implementation workflow following domain boundaries. |
+| | `implement-spec` | `/implement-spec` | High-fidelity code generation directly from engineering design specs. |
+| | `prototype` | `/prototype` | Rapid prototyping spikes separating UI and core logic layers. |
+| | `diagnosing-bugs` | `/diagnosing-bugs` | Structured bug triage and reproducible root-cause analysis loops. |
+| **Architecture & Design** | `codebase-design` | `/codebase-design` | Deepening codebases using high-cohesion, low-coupling module boundaries. |
+| | `domain-modeling` | `/domain-modeling` | Formulates domain glossaries and Architecture Decision Records (ADRs). |
+| | `to-spec` | `/to-spec` | Transforms ambiguous feature requests into rigorous technical specifications. |
+| | `to-tickets` | `/to-tickets` | Breaks down large specifications into bite-sized, 100k-token agent tickets. |
+| | `improve-codebase-architecture` | `/improve-codebase-architecture` | Generates comprehensive codebase architecture audits and HTML reports. |
+| | `setup-ts-deep-modules` | `/setup-ts-deep-modules` | Configures `dependency-cruiser` to enforce deep TypeScript architecture boundaries. |
+| **Review & Quality** | `code-review` | `/code-review` | Senior-level code review focusing on correctness, edge cases, and diff minimization. |
+| | `git-guardrails-claude-code` | `/git-guardrails` | Intercepts dangerous git actions (`push --force`, `reset --hard`, deleting branches). |
+| | `grill-me` | `/grill-me` | Interactive conversational interview grilling the user on design tradeoffs. |
+| | `grill-with-docs` | `/grill-with-docs` | Document-grounded architecture interrogation against official reference docs. |
+| | `pr` | `/pr` | Generates structured, high-context pull request descriptions and changelogs. |
+| | `setup-pre-commit` | `/setup-pre-commit` | Configures Husky, lint-staged, and automated git hooks. |
+| **Meta & Navigation** | `ask-matt` | `/ask-matt` | Consults Matt Pocock's software engineering principles and mental models. |
+| | `chief-of-staff` | `/chief-of-staff` | High-level engineering roadmap triage and task prioritization. |
+| | `wait-what` | `/wait-what` | Cognitive circuit breaker when prompts contain contradictory constraints. |
+| | `wayfinder` | `/wayfinder` | Monorepo navigation and structural orientation for newcomers. |
+| | `wizard` | `/wizard` | Step-by-step interactive configuration wizard for complex tooling. |
+| | `retro` | `/retro` | Team retrospective generator synthesizing project wins and friction points. |
+
+---
+
+## ⚡ Why Skill-RAG Outperforms Naive Bundling (The Diff)
+
+| Feature | Naive Agent Harness (Claude Code, Pi default) | Kobayashi Maru (BM25 Skill-RAG) |
+| :--- | :--- | :--- |
+| **Startup Token Cost** | **37,500 tokens / turn** (Dumps all 500+ skills into prompt) | **0 tokens** on greetings; **~150 tokens** on match |
+| **Dollar Cost on Cold Start** | ~$0.11 per simple prompt like `"hi"` | **$0.0000** wasted on skills |
+| **Matching Speed** | N/A (Brute force text injection) | **$< 2\text{ms}$** in-memory Okapi BM25 ranker |
+| **Adding New Skills** | Makes system prompt longer and degrades model attention | Adds $0$ prompt overhead until dynamically queried |
+| **Mid-Session Runbooks** | None (Model must remember full instructions from turn 1) | Mid-session `find_skill` meta-tool fetches any runbook |
+
+---
+
+## 💡 Adding Custom Skills & Runbooks
+
+Adding custom skills to Kobayashi Maru is completely friction-free. You **never need to disable skills or fear context bloat**:
+
+1. Create a directory in `~/.agents/skills/<my-skill>/`:
+   ```bash
+   mkdir -p ~/.agents/skills/db-migrate
+   ```
+2. Add a `SKILL.md` with clear frontmatter:
+   ```markdown
+   ---
+   name: db-migrate
+   description: "Zero-downtime PostgreSQL schema migrations and rollback scripts"
+   ---
+
+   # Database Migration Runbook
+   When altering tables in production:
+   1. Never add non-null columns without defaults.
+   2. Use CONCURRENTLY for index creation.
+   3. Always write a companion rollback script.
+   ```
+3. **That's it!** Skill-RAG automatically indexes your new skill on the next turn. When a prompt mentions `"migrate postgres tables"`, Skill-RAG injects `db-migrate` dynamically in $< 2\text{ms}$.
+
+---
+
+## 🚀 1-Command Installation & Setup CLI
 
 Run the automated installer on macOS or Linux:
 
@@ -132,20 +203,45 @@ cd kobayashi-maru
 ./setup.sh
 ```
 
-### What `setup.sh` Automates:
-1. **System Check**: Verifies Node.js (>= 20.x), Git, and installs `ast-grep` via Homebrew / npm if missing.
-2. **Pi Runtime**: Verifies or globally installs `@earendil-works/pi-coding-agent`.
-3. **Deploys SOTA Extensions** to `~/.pi/agent/extensions/`:
-   - [`skill-rag.ts`](skill-rag.ts) (Zero-token Skill-RAG)
-   - [`bottom-up-router.ts`](bottom-up-router.ts) (Dual Virtual Router)
-   - [`repo-mapper.ts`](repo-mapper.ts) (AST Codebase Topology)
-   - [`git-checkpoint.ts`](git-checkpoint.ts) (Deterministic Turn Rollbacks)
-4. **Installs Vetted Ecosystem Packages**:
+### Setup CLI Options
+
+[`./setup.sh`](setup.sh) provides flexible flags for different installation workflows:
+
+```bash
+# Complete end-to-end setup (Installs runtime, syncs 38 skills, deploys extensions & config)
+./setup.sh
+
+# Run non-destructive diagnostic check
+./setup.sh --check
+
+# Synchronize Matt Pocock & custom skills to ~/.agents/skills only
+./setup.sh --skills
+
+# Deploy SOTA Pi extensions only (~/.pi/agent/extensions/)
+./setup.sh --extensions
+
+# Write NVIDIA SoL-Pi & Pi settings.json configuration files only
+./setup.sh --config
+
+# View CLI options
+./setup.sh --help
+```
+
+### What `./setup.sh` Automates Under the Hood:
+1. **System & Toolchain Checks**: Verifies Node.js (>= 20.x), Git, and installs `ast-grep` via Homebrew / npm.
+2. **Pi Runtime Verification**: Checks or installs `@earendil-works/pi-coding-agent`.
+3. **Skills Suite Synchronization**: Copies the 38 Matt Pocock skills from `.agents/skills/` into `~/.agents/skills/`.
+4. **Extension Deployment**: Deploys the 4 SOTA extensions into `~/.pi/agent/extensions/`:
+   - [`skill-rag.ts`](skill-rag.ts) (Zero-token Skill-RAG & Minimal Seam)
+   - [`bottom-up-router.ts`](bottom-up-router.ts) (Dual Virtual Model Router)
+   - [`repo-mapper.ts`](repo-mapper.ts) (AST Codebase Topology Mapper)
+   - [`git-checkpoint.ts`](git-checkpoint.ts) (Deterministic Turn Checkpoints)
+5. **Ecosystem Package Installation**:
    - `@dietrichgebert/ponytail` (Senior dev mode: anti-overengineering)
    - `@langfuse/pi-observability-plugin` (Session telemetry, token breakdowns, costs)
    - `pi-web-access` (Context-gated search and web retrieval)
-5. **Configures NVIDIA SoL-Pi**: Writes production `~/.pi/agent/sol-pi.json`.
-6. **Pre-flight Smoke Test**: Verifies runtime health and model registrations.
+6. **NVIDIA SoL-Pi & Pi Settings**: Writes production `sol-pi.json` and `settings.json`.
+7. **Pre-flight Smoke Test**: Verifies runtime health and registered models.
 
 ---
 
@@ -165,14 +261,17 @@ Starts directly on the local 9B model at $0.00 compute. Automatically escalates 
 pi --model auto/bottom-up -p "Fix the TypeScript and ESLint warnings in src/components/oMaps.tsx"
 ```
 
-### 3. Using 500+ Skills with Zero Cold-Start Overhead
-Drop any number of skills into `~/.agents/skills/`. You never need to disable or unbundle them:
-- **Automatic Matching**: Simply state your request:
+### 3. Using Skills via Slash Commands or Natural Language
+You can invoke skills either via explicit slash commands or by naturally stating your engineering intent:
+- **Slash Command**:
   ```bash
-  pi -p "Generate an architecture sequence diagram for user login"
+  pi -p "Use /tdd to implement a thread-safe token bucket rate limiter"
   ```
-  *Skill-RAG automatically matches `archify`, injecting ONLY `archify` into context (~150 tokens).*
-- **On-Demand Search**: The agent can call `find_skill({ query: "database migrations" })` during long multi-turn sessions to fetch any runbook.
+- **Natural Language Intent**:
+  ```bash
+  pi -p "Review my recent git diff and check for edge-case memory leaks"
+  ```
+  *Skill-RAG matches `code-review`, injecting ONLY `code-review` into context (~150 tokens).*
 
 ### 4. Fast AST Codebase Topology
 Inspect symbols and structure across a 100k-line monorepo without dumping source code bodies into context:
@@ -196,7 +295,7 @@ repo_map({ path: "packages/ui-web/src/components", query: "geo risk layer" })
 
 ```text
 kobayashi-maru/
-├── setup.sh               # 1-command automated installer
+├── setup.sh               # 1-command automated installer with CLI flags
 ├── skill-rag.ts           # Pillar 1: Okapi BM25 Skill-RAG & Minimal Seam
 ├── bottom-up-router.ts    # Pillar 4: In-Process Dual Virtual Model Router
 ├── repo-mapper.ts         # Pillar 5: Rust ast-grep Monorepo Topology Mapper
@@ -205,6 +304,11 @@ kobayashi-maru/
 ├── settings.json          # Production Pi settings with DeepSeek Minimal Seam
 ├── harness.yaml           # Declarative multi-tier orchestration spec
 ├── package.json           # Runtime metadata & dependencies
+├── .agents/skills/        # Bundled 38-skill Matt Pocock engineering suite
+│   ├── tdd/               # Test-driven development runbook
+│   ├── codebase-design/   # Modular architecture and deepening runbook
+│   ├── code-review/       # Senior review guidelines
+│   └── ...                # 35 additional curated engineering skills
 ├── eval/                  # Real-world benchmark suite & datasets
 │   ├── BENCHMARK_RESULTS.md # Detailed head-to-head empirical metrics
 │   └── datasets/          # Reproducible test tasks (distributed lock, hyperdx, etc.)
