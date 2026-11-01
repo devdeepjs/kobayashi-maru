@@ -538,11 +538,13 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
             } else if (name === "to-spec") {
               ["to-spec", "spec", "prd", "specification", "requirements doc"].forEach((t) => triggers.add(t));
             } else if (name === "to-tickets") {
-              ["to-tickets", "break into tickets", "tracer bullets", "decompose tasks", "tickets"].forEach((t) => triggers.add(t));
+              ["to-tickets", "break into tickets", "tracer bullets", "decompose tasks", "tickets", "jira", "linear", "issue tracker", "backlog"].forEach((t) => triggers.add(t));
+            } else if (name === "triage") {
+              ["triage", "categorise issue", "bug report", "label issue", "backlog grooming"].forEach((t) => triggers.add(t));
             } else if (name === "grill-me" || name === "grilling") {
               ["grill me", "grill-me", "interview me", "sharpen plan", "challenge design"].forEach((t) => triggers.add(t));
             } else if (name === "diagnosing-bugs") {
-              ["diagnose bug", "reproduce bug", "hard bug", "troubleshoot", "root cause"].forEach((t) => triggers.add(t));
+              ["diagnose bug", "reproduce bug", "hard bug", "troubleshoot", "root cause", "stack trace", "traceback", "assertionerror"].forEach((t) => triggers.add(t));
             } else if (name === "domain-modeling") {
               ["domain model", "glossary", "ubiquitous language", "adr"].forEach((t) => triggers.add(t));
             } else if (name === "codebase-design") {
@@ -572,12 +574,63 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
     return catalog;
   }
 
-  function matchSkillsForPrompt(promptText: string): SkillCatalogItem[] {
+  interface SkillMatchResult {
+    skills: SkillCatalogItem[];
+    detectedEntity?: {
+      type: "jira_issue" | "url_issue" | "git_diff" | "stack_trace";
+      value: string;
+    };
+  }
+
+  function matchSkillsForPrompt(promptText: string): SkillMatchResult {
     const catalog = getSkillCatalog();
     const lower = promptText.toLowerCase();
     const matched: SkillCatalogItem[] = [];
+    let detectedEntity: SkillMatchResult["detectedEntity"];
 
+    // 1. Entity Recognition Layer (Jira, Linear, GitHub Issues, Stack Traces, Diffs)
+    // Jira / Linear issue key pattern (e.g. GEO-104, PROJ-9921, ENG-42)
+    const issueKeyMatch = promptText.match(/\b([A-Z]{2,10}-\d+)\b/);
+    // Atlassian / GitHub / Linear URLs
+    const issueUrlMatch = promptText.match(/https?:\/\/[^\s/$.?#].[^\s]*(?:\/browse\/|\/issues\/|\/pull\/|\/workspaces\/[^\s/]+\/issues\/)([A-Z0-9_-]+)/i);
+    // GitHub short issue #123
+    const shortIssueMatch = promptText.match(/(?:^|\s)#(\d{1,6})\b/);
+
+    if (issueKeyMatch || issueUrlMatch || shortIssueMatch) {
+      const ticketVal = issueKeyMatch ? issueKeyMatch[1] : (issueUrlMatch ? issueUrlMatch[1] : `#${shortIssueMatch![1]}`);
+      detectedEntity = {
+        type: issueKeyMatch ? "jira_issue" : (issueUrlMatch ? "url_issue" : "jira_issue"),
+        value: ticketVal,
+      };
+      // Find ticket or triage skill
+      const ticketSkill = catalog.find((s) => s.name === "to-tickets" || s.name === "triage" || s.name.includes("jira"));
+      if (ticketSkill && !matched.some((s) => s.name === ticketSkill.name)) {
+        matched.push(ticketSkill);
+      }
+    }
+
+    // Git Diff patch detection -> activates code-review
+    if (/(?:diff --git|@@ -\d+,\d+ \+\d+,\d+ @@)/.test(promptText)) {
+      detectedEntity = detectedEntity || { type: "git_diff", value: "git_patch" };
+      const reviewSkill = catalog.find((s) => s.name === "code-review" || s.name === "pr");
+      if (reviewSkill && !matched.some((s) => s.name === reviewSkill.name)) {
+        matched.push(reviewSkill);
+      }
+    }
+
+    // Stack Trace / Error detection -> activates diagnosing-bugs
+    if (/\b(?:TypeError|ReferenceError|AssertionError|SyntaxError|UnhandledPromiseRejection|Traceback \(most recent call last\)):/i.test(promptText)) {
+      detectedEntity = detectedEntity || { type: "stack_trace", value: "runtime_error" };
+      const bugSkill = catalog.find((s) => s.name === "diagnosing-bugs");
+      if (bugSkill && !matched.some((s) => s.name === bugSkill.name)) {
+        matched.push(bugSkill);
+      }
+    }
+
+    // 2. Lexical & Semantic Keyword Pattern Matching
     for (const skill of catalog) {
+      if (matched.some((s) => s.name === skill.name)) continue;
+
       for (const trigger of skill.triggers) {
         if (trigger.startsWith("/")) {
           if (lower.includes(trigger)) {
@@ -595,7 +648,7 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       if (matched.length >= 2) break; // Maximum 2 skills to prevent token bloat
     }
 
-    return matched;
+    return { skills: matched, detectedEntity };
   }
 
   // --- 5. TURN ORCHESTRATION & DYNAMIC TIER ROUTING ---
@@ -603,7 +656,8 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
   pi.on("before_agent_start", async (event: any, ctx: PiContext) => {
     filesReadInRun.clear();
     directReadCountInRun = 0;
-    const text = (event.prompt || "").toLowerCase();
+    const rawPrompt = String(event.prompt || "");
+    const text = rawPrompt.toLowerCase();
 
     // 1. Detect explicit prompt bracket/command overrides
     let explicitSwitch = false;
@@ -679,14 +733,23 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
         `\n- Tier Switcher Tool (\`switch_tier\`): If this task requires full frontier reasoning, call \`switch_tier\` to promote to 'orchestrator'.`;
     }
 
+    // Dynamic On-Demand Skills disclosure
+    const catalog = getSkillCatalog();
+    const availableSkillsSummary = catalog.map((s) => s.name).slice(0, 25).join(", ");
+    guidance += `\n- On-Demand Skills (\`load_skill\`): Specialized domain skills are available via \`load_skill\`: [${availableSkillsSummary}]. If a task involves Jira/tickets, deep bug diagnosis, PR review, TDD, or ADRs, autonomously invoke \`load_skill(skill_name)\` to retrieve instructions.`;
+
     // Progressive Skill Disclosure: inject matched workflow instructions for this turn only
-    const matchedSkills = matchSkillsForPrompt(text);
-    if (matchedSkills.length > 0) {
-      for (const s of matchedSkills) {
+    const matchResult = matchSkillsForPrompt(rawPrompt);
+    if (matchResult.detectedEntity) {
+      guidance += `\n\n[KOBAYASHI ENTITY RECOGNITION]: Detected ${matchResult.detectedEntity.type}: "${matchResult.detectedEntity.value}". Ensure you check this issue/entity reference before proceeding.`;
+    }
+
+    if (matchResult.skills.length > 0) {
+      for (const s of matchResult.skills) {
         guidance += `\n\n[DYNAMIC WORKFLOW INSTRUCTIONS ACTIVATED: ${s.name.toUpperCase()}]\n${s.body}\n[END DYNAMIC WORKFLOW: ${s.name.toUpperCase()}]`;
       }
       if (ctx?.hasUI) {
-        ctx.ui.notify(`[Kobayashi]: Auto-loaded workflow: ${matchedSkills.map((s) => s.name).join(", ")}`, "info");
+        ctx.ui.notify(`[Kobayashi]: Auto-loaded workflow: ${matchResult.skills.map((s) => s.name).join(", ")}`, "info");
       }
     }
 
