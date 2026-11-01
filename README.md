@@ -13,7 +13,7 @@
 [![Local Workhorse: $0.00 Compute](https://img.shields.io/badge/Local%20Workhorse-%240.00%20Compute-blueviolet)](#pillar-4-hybrid-powertrain--dual-virtual-router-bottom-up-routerts)
 
 ```text
-    __ __ obayashi  __  ___                 
+    __ __                    
    / //_/          /  |/  /___ _ _____ __  __
   / ,<    ____    / /|_/ // __ `// ___// / / /
  / /| |  /___/   / /  / // /_/ // /   / /_/ / 
