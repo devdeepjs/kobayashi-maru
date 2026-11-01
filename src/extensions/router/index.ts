@@ -733,23 +733,12 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
         `\n- Tier Switcher Tool (\`switch_tier\`): If this task requires full frontier reasoning, call \`switch_tier\` to promote to 'orchestrator'.`;
     }
 
-    // Dynamic On-Demand Skills disclosure
-    const catalog = getSkillCatalog();
-    const availableSkillsSummary = catalog.map((s) => s.name).slice(0, 25).join(", ");
-    guidance += `\n- On-Demand Skills (\`load_skill\`): Specialized domain skills are available via \`load_skill\`: [${availableSkillsSummary}]. If a task involves Jira/tickets, deep bug diagnosis, PR review, TDD, or ADRs, autonomously invoke \`load_skill(skill_name)\` to retrieve instructions.`;
-
-    // Progressive Skill Disclosure: inject matched workflow instructions for this turn only
+    // Entity Recognition hint (e.g., GEO-104 ticket reference or git diff)
     const matchResult = matchSkillsForPrompt(rawPrompt);
     if (matchResult.detectedEntity) {
-      guidance += `\n\n[KOBAYASHI ENTITY RECOGNITION]: Detected ${matchResult.detectedEntity.type}: "${matchResult.detectedEntity.value}". Ensure you check this issue/entity reference before proceeding.`;
-    }
-
-    if (matchResult.skills.length > 0) {
-      for (const s of matchResult.skills) {
-        guidance += `\n\n[DYNAMIC WORKFLOW INSTRUCTIONS ACTIVATED: ${s.name.toUpperCase()}]\n${s.body}\n[END DYNAMIC WORKFLOW: ${s.name.toUpperCase()}]`;
-      }
+      guidance += `\n\n[KOBAYASHI ENTITY DETECTED]: ${matchResult.detectedEntity.type}: "${matchResult.detectedEntity.value}". Inspect this ticket or diff reference before writing code.`;
       if (ctx?.hasUI) {
-        ctx.ui.notify(`[Kobayashi]: Auto-loaded workflow: ${matchResult.skills.map((s) => s.name).join(", ")}`, "info");
+        ctx.ui.notify(`[Kobayashi]: Recognized ${matchResult.detectedEntity.type}: ${matchResult.detectedEntity.value}`, "info");
       }
     }
 
