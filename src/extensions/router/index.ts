@@ -150,6 +150,180 @@ export function checkBulkExploration(cmd: string): { isBulk: boolean; reason?: s
   return { isBulk: false };
 }
 
+// --- PROGRESSIVE SKILL DISCLOSURE & DYNAMIC WORKFLOW RETRIEVAL ---
+
+export interface SkillCatalogItem {
+  name: string;
+  description: string;
+  filePath: string;
+  body: string;
+  triggers: string[];
+}
+
+let cachedSkills: SkillCatalogItem[] | null = null;
+
+export function getSkillCatalog(): SkillCatalogItem[] {
+  if (cachedSkills) return cachedSkills;
+
+  const catalog: SkillCatalogItem[] = [];
+  const searchDirs = [
+    resolve(process.cwd(), ".agents", "skills"),
+    join(homedir(), ".agents", "skills"),
+  ];
+
+  const seen = new Set<string>();
+
+  for (const sDir of searchDirs) {
+    if (!existsSync(sDir)) continue;
+    try {
+      const entries = readdirSync(sDir, { withFileTypes: true });
+      for (const ent of entries) {
+        if (!ent.isDirectory() || seen.has(ent.name)) continue;
+        const skillFile = join(sDir, ent.name, "SKILL.md");
+        if (!existsSync(skillFile)) continue;
+
+        try {
+          const raw = readFileSync(skillFile, "utf8");
+          let description = "";
+          let name = ent.name;
+          let body = raw;
+
+          const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+          if (fmMatch) {
+            body = fmMatch[2].trim();
+            const descMatch = fmMatch[1].match(/description:\s*(.+)/);
+            if (descMatch) description = descMatch[1].replace(/^["']|["']$/g, "").trim();
+            const nameMatch = fmMatch[1].match(/name:\s*(.+)/);
+            if (nameMatch) name = nameMatch[1].replace(/^["']|["']$/g, "").trim();
+          }
+
+          const triggers = new Set<string>([
+            name.toLowerCase(),
+            name.replace(/-/g, " ").toLowerCase(),
+            `/${name.toLowerCase()}`,
+          ]);
+
+          // Add intelligent semantic trigger words for standard engineering workflows
+          if (name === "code-review") {
+            ["review", "code review", "pr review", "pull request", "review changes", "standards"].forEach((t) => triggers.add(t));
+          } else if (name === "tdd") {
+            ["tdd", "test-driven", "test driven", "write tests first", "red green refactor", "unit test"].forEach((t) => triggers.add(t));
+          } else if (name === "to-spec") {
+            ["to-spec", "spec", "prd", "specification", "requirements doc"].forEach((t) => triggers.add(t));
+          } else if (name === "to-tickets") {
+            ["to-tickets", "break into tickets", "tracer bullets", "decompose tasks", "tickets", "jira", "linear", "issue tracker", "backlog"].forEach((t) => triggers.add(t));
+          } else if (name === "triage") {
+            ["triage", "categorise issue", "bug report", "label issue", "backlog grooming"].forEach((t) => triggers.add(t));
+          } else if (name === "grill-me" || name === "grilling") {
+            ["grill me", "grill-me", "interview me", "sharpen plan", "challenge design"].forEach((t) => triggers.add(t));
+          } else if (name === "diagnosing-bugs") {
+            ["diagnose bug", "reproduce bug", "hard bug", "troubleshoot", "root cause", "stack trace", "traceback", "assertionerror"].forEach((t) => triggers.add(t));
+          } else if (name === "domain-modeling") {
+            ["domain model", "glossary", "ubiquitous language", "adr"].forEach((t) => triggers.add(t));
+          } else if (name === "codebase-design") {
+            ["codebase design", "deep module", "information hiding"].forEach((t) => triggers.add(t));
+          } else if (name === "archify") {
+            ["archify", "architecture diagram", "mermaid diagram", "sequence diagram"].forEach((t) => triggers.add(t));
+          } else if (name === "pr") {
+            ["pr body", "write a pr", "pull request description"].forEach((t) => triggers.add(t));
+          } else if (name === "chief-of-staff") {
+            ["chief of staff", "coordinate subagents"].forEach((t) => triggers.add(t));
+          }
+
+          catalog.push({
+            name,
+            description,
+            filePath: skillFile,
+            body,
+            triggers: Array.from(triggers),
+          });
+          seen.add(name);
+        } catch {}
+      }
+    } catch {}
+  }
+
+  cachedSkills = catalog;
+  return catalog;
+}
+
+export interface SkillMatchResult {
+  skills: SkillCatalogItem[];
+  detectedEntity?: {
+    type: "jira_issue" | "url_issue" | "git_diff" | "stack_trace";
+    value: string;
+  };
+}
+
+export function matchSkillsForPrompt(promptText: string): SkillMatchResult {
+  const catalog = getSkillCatalog();
+  const lower = promptText.toLowerCase();
+  const matched: SkillCatalogItem[] = [];
+  let detectedEntity: SkillMatchResult["detectedEntity"];
+
+  // 1. Entity Recognition Layer (Jira, Linear, GitHub Issues, Stack Traces, Diffs)
+  // Jira / Linear issue key pattern (e.g. GEO-104, PROJ-9921, ENG-42)
+  const issueKeyMatch = promptText.match(/\b([A-Z]{2,10}-\d+)\b/);
+  // Atlassian / GitHub / Linear URLs
+  const issueUrlMatch = promptText.match(/https?:\/\/[^\s/$.?#].[^\s]*(?:\/browse\/|\/issues\/|\/pull\/|\/workspaces\/[^\s/]+\/issues\/)([A-Z0-9_-]+)/i);
+  // GitHub short issue #123
+  const shortIssueMatch = promptText.match(/(?:^|\s)#(\d{1,6})\b/);
+
+  if (issueKeyMatch || issueUrlMatch || shortIssueMatch) {
+    const ticketVal = issueKeyMatch ? issueKeyMatch[1] : (issueUrlMatch ? issueUrlMatch[1] : `#${shortIssueMatch![1]}`);
+    detectedEntity = {
+      type: issueKeyMatch ? "jira_issue" : (issueUrlMatch ? "url_issue" : "jira_issue"),
+      value: ticketVal,
+    };
+    // Find ticket or triage skill
+    const ticketSkill = catalog.find((s) => s.name === "to-tickets" || s.name === "triage" || s.name.includes("jira"));
+    if (ticketSkill && !matched.some((s) => s.name === ticketSkill.name)) {
+      matched.push(ticketSkill);
+    }
+  }
+
+  // Git Diff patch detection -> activates code-review
+  if (/(?:diff --git|@@ -\d+,\d+ \+\d+,\d+ @@)/.test(promptText)) {
+    detectedEntity = detectedEntity || { type: "git_diff", value: "git_patch" };
+    const reviewSkill = catalog.find((s) => s.name === "code-review" || s.name === "pr");
+    if (reviewSkill && !matched.some((s) => s.name === reviewSkill.name)) {
+      matched.push(reviewSkill);
+    }
+  }
+
+  // Stack Trace / Error detection -> activates diagnosing-bugs
+  if (/\b(?:TypeError|ReferenceError|AssertionError|SyntaxError|UnhandledPromiseRejection|Traceback \(most recent call last\)):/i.test(promptText)) {
+    detectedEntity = detectedEntity || { type: "stack_trace", value: "runtime_error" };
+    const bugSkill = catalog.find((s) => s.name === "diagnosing-bugs");
+    if (bugSkill && !matched.some((s) => s.name === bugSkill.name)) {
+      matched.push(bugSkill);
+    }
+  }
+
+  // 2. Lexical & Semantic Keyword Pattern Matching
+  for (const skill of catalog) {
+    if (matched.some((s) => s.name === skill.name)) continue;
+
+    for (const trigger of skill.triggers) {
+      if (trigger.startsWith("/")) {
+        if (lower.includes(trigger)) {
+          matched.push(skill);
+          break;
+        }
+      } else {
+        const regex = new RegExp(`\\b${trigger.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "i");
+        if (regex.test(lower)) {
+          matched.push(skill);
+          break;
+        }
+      }
+    }
+    if (matched.length >= 2) break; // Maximum 2 skills to prevent token bloat
+  }
+
+  return { skills: matched, detectedEntity };
+}
+
 export default function kobayashiRouterExtension(pi: PiAgent) {
   let config: any = null;
   if (existsSync(CONFIG_PATH)) {
@@ -476,180 +650,6 @@ export default function kobayashiRouterExtension(pi: PiAgent) {
       return { content: newContent };
     }
   });
-
-  // --- 4. PROGRESSIVE SKILL DISCLOSURE & DYNAMIC WORKFLOW RETRIEVAL ---
-
-  interface SkillCatalogItem {
-    name: string;
-    description: string;
-    filePath: string;
-    body: string;
-    triggers: string[];
-  }
-
-  let cachedSkills: SkillCatalogItem[] | null = null;
-
-  function getSkillCatalog(): SkillCatalogItem[] {
-    if (cachedSkills) return cachedSkills;
-
-    const catalog: SkillCatalogItem[] = [];
-    const searchDirs = [
-      resolve(process.cwd(), ".agents", "skills"),
-      join(homedir(), ".agents", "skills"),
-    ];
-
-    const seen = new Set<string>();
-
-    for (const sDir of searchDirs) {
-      if (!existsSync(sDir)) continue;
-      try {
-        const entries = readdirSync(sDir, { withFileTypes: true });
-        for (const ent of entries) {
-          if (!ent.isDirectory() || seen.has(ent.name)) continue;
-          const skillFile = join(sDir, ent.name, "SKILL.md");
-          if (!existsSync(skillFile)) continue;
-
-          try {
-            const raw = readFileSync(skillFile, "utf8");
-            let description = "";
-            let name = ent.name;
-            let body = raw;
-
-            const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
-            if (fmMatch) {
-              body = fmMatch[2].trim();
-              const descMatch = fmMatch[1].match(/description:\s*(.+)/);
-              if (descMatch) description = descMatch[1].replace(/^["']|["']$/g, "").trim();
-              const nameMatch = fmMatch[1].match(/name:\s*(.+)/);
-              if (nameMatch) name = nameMatch[1].replace(/^["']|["']$/g, "").trim();
-            }
-
-            const triggers = new Set<string>([
-              name.toLowerCase(),
-              name.replace(/-/g, " ").toLowerCase(),
-              `/${name.toLowerCase()}`,
-            ]);
-
-            // Add intelligent semantic trigger words for standard engineering workflows
-            if (name === "code-review") {
-              ["review", "code review", "pr review", "pull request", "review changes", "standards"].forEach((t) => triggers.add(t));
-            } else if (name === "tdd") {
-              ["tdd", "test-driven", "test driven", "write tests first", "red green refactor", "unit test"].forEach((t) => triggers.add(t));
-            } else if (name === "to-spec") {
-              ["to-spec", "spec", "prd", "specification", "requirements doc"].forEach((t) => triggers.add(t));
-            } else if (name === "to-tickets") {
-              ["to-tickets", "break into tickets", "tracer bullets", "decompose tasks", "tickets", "jira", "linear", "issue tracker", "backlog"].forEach((t) => triggers.add(t));
-            } else if (name === "triage") {
-              ["triage", "categorise issue", "bug report", "label issue", "backlog grooming"].forEach((t) => triggers.add(t));
-            } else if (name === "grill-me" || name === "grilling") {
-              ["grill me", "grill-me", "interview me", "sharpen plan", "challenge design"].forEach((t) => triggers.add(t));
-            } else if (name === "diagnosing-bugs") {
-              ["diagnose bug", "reproduce bug", "hard bug", "troubleshoot", "root cause", "stack trace", "traceback", "assertionerror"].forEach((t) => triggers.add(t));
-            } else if (name === "domain-modeling") {
-              ["domain model", "glossary", "ubiquitous language", "adr"].forEach((t) => triggers.add(t));
-            } else if (name === "codebase-design") {
-              ["codebase design", "deep module", "information hiding"].forEach((t) => triggers.add(t));
-            } else if (name === "archify") {
-              ["archify", "architecture diagram", "mermaid diagram", "sequence diagram"].forEach((t) => triggers.add(t));
-            } else if (name === "pr") {
-              ["pr body", "write a pr", "pull request description"].forEach((t) => triggers.add(t));
-            } else if (name === "chief-of-staff") {
-              ["chief of staff", "coordinate subagents"].forEach((t) => triggers.add(t));
-            }
-
-            catalog.push({
-              name,
-              description,
-              filePath: skillFile,
-              body,
-              triggers: Array.from(triggers),
-            });
-            seen.add(name);
-          } catch {}
-        }
-      } catch {}
-    }
-
-    cachedSkills = catalog;
-    return catalog;
-  }
-
-  interface SkillMatchResult {
-    skills: SkillCatalogItem[];
-    detectedEntity?: {
-      type: "jira_issue" | "url_issue" | "git_diff" | "stack_trace";
-      value: string;
-    };
-  }
-
-  function matchSkillsForPrompt(promptText: string): SkillMatchResult {
-    const catalog = getSkillCatalog();
-    const lower = promptText.toLowerCase();
-    const matched: SkillCatalogItem[] = [];
-    let detectedEntity: SkillMatchResult["detectedEntity"];
-
-    // 1. Entity Recognition Layer (Jira, Linear, GitHub Issues, Stack Traces, Diffs)
-    // Jira / Linear issue key pattern (e.g. GEO-104, PROJ-9921, ENG-42)
-    const issueKeyMatch = promptText.match(/\b([A-Z]{2,10}-\d+)\b/);
-    // Atlassian / GitHub / Linear URLs
-    const issueUrlMatch = promptText.match(/https?:\/\/[^\s/$.?#].[^\s]*(?:\/browse\/|\/issues\/|\/pull\/|\/workspaces\/[^\s/]+\/issues\/)([A-Z0-9_-]+)/i);
-    // GitHub short issue #123
-    const shortIssueMatch = promptText.match(/(?:^|\s)#(\d{1,6})\b/);
-
-    if (issueKeyMatch || issueUrlMatch || shortIssueMatch) {
-      const ticketVal = issueKeyMatch ? issueKeyMatch[1] : (issueUrlMatch ? issueUrlMatch[1] : `#${shortIssueMatch![1]}`);
-      detectedEntity = {
-        type: issueKeyMatch ? "jira_issue" : (issueUrlMatch ? "url_issue" : "jira_issue"),
-        value: ticketVal,
-      };
-      // Find ticket or triage skill
-      const ticketSkill = catalog.find((s) => s.name === "to-tickets" || s.name === "triage" || s.name.includes("jira"));
-      if (ticketSkill && !matched.some((s) => s.name === ticketSkill.name)) {
-        matched.push(ticketSkill);
-      }
-    }
-
-    // Git Diff patch detection -> activates code-review
-    if (/(?:diff --git|@@ -\d+,\d+ \+\d+,\d+ @@)/.test(promptText)) {
-      detectedEntity = detectedEntity || { type: "git_diff", value: "git_patch" };
-      const reviewSkill = catalog.find((s) => s.name === "code-review" || s.name === "pr");
-      if (reviewSkill && !matched.some((s) => s.name === reviewSkill.name)) {
-        matched.push(reviewSkill);
-      }
-    }
-
-    // Stack Trace / Error detection -> activates diagnosing-bugs
-    if (/\b(?:TypeError|ReferenceError|AssertionError|SyntaxError|UnhandledPromiseRejection|Traceback \(most recent call last\)):/i.test(promptText)) {
-      detectedEntity = detectedEntity || { type: "stack_trace", value: "runtime_error" };
-      const bugSkill = catalog.find((s) => s.name === "diagnosing-bugs");
-      if (bugSkill && !matched.some((s) => s.name === bugSkill.name)) {
-        matched.push(bugSkill);
-      }
-    }
-
-    // 2. Lexical & Semantic Keyword Pattern Matching
-    for (const skill of catalog) {
-      if (matched.some((s) => s.name === skill.name)) continue;
-
-      for (const trigger of skill.triggers) {
-        if (trigger.startsWith("/")) {
-          if (lower.includes(trigger)) {
-            matched.push(skill);
-            break;
-          }
-        } else {
-          const regex = new RegExp(`\\b${trigger.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "i");
-          if (regex.test(lower)) {
-            matched.push(skill);
-            break;
-          }
-        }
-      }
-      if (matched.length >= 2) break; // Maximum 2 skills to prevent token bloat
-    }
-
-    return { skills: matched, detectedEntity };
-  }
 
   // --- 5. TURN ORCHESTRATION & DYNAMIC TIER ROUTING ---
 
