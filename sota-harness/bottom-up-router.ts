@@ -116,10 +116,19 @@ export default function (pi: ExtensionAPI) {
         state.escalationReason = `Escalated to Luna after ${state.workerFailures} worker failures`;
       }
 
-      // Transition from planner to worker after first assistant response
+      // Transition from planner to worker only when planner has completed its cycle:
+      // i.e., it produced a text/plan output (NOT an intermediate toolCall),
+      // or reached the planner turn budget (max 3 planning turns).
       const assistantMsgs = request.messages.filter((m) => m.role === "assistant");
+      const lastAssistant = assistantMsgs.at(-1);
+      const isToolCalling = lastAssistant && Array.isArray(lastAssistant.content) &&
+        lastAssistant.content.some((part: any) => part.type === "toolCall");
+
       if (state.phase === "planner" && assistantMsgs.length >= 1) {
-        state.phase = "worker";
+        // If the planner just emitted a tool call, keep it in planner phase so it receives and interprets the result
+        if (!isToolCalling || assistantMsgs.length >= 3) {
+          state.phase = "worker";
+        }
       }
 
       // Resolve Frontier (Luna)
