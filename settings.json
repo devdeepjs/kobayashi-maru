@@ -5,7 +5,8 @@
     "npm:pi-bedrock-mantle",
     "npm:@dietrichgebert/ponytail",
     "npm:@langfuse/pi-observability-plugin",
-    "npm:pi-web-access"
+    "npm:pi-web-access",
+    "npm:pi-ollama"
   ],
   "defaultProvider": "bedrock-mantle",
   "defaultModel": "openai.gpt-5.6-luna",

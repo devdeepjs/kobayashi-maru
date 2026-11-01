@@ -240,6 +240,7 @@ cd kobayashi-maru
    - `@dietrichgebert/ponytail` (Senior dev mode: anti-overengineering)
    - `@langfuse/pi-observability-plugin` (Session telemetry, token breakdowns, costs)
    - `pi-web-access` (Context-gated search and web retrieval)
+   - `pi-ollama` (Native Ollama provider, per-request 32K context allocation & warm-up)
 6. **NVIDIA SoL-Pi & Pi Settings**: Writes production `sol-pi.json` and `settings.json`.
 7. **Pre-flight Smoke Test**: Verifies runtime health and registered models.
 
@@ -288,6 +289,7 @@ repo_map({ path: "packages/ui-web/src/components", query: "geo risk layer" })
 | [`@dietrichgebert/ponytail`](https://www.npmjs.com/package/@dietrichgebert/ponytail) | **Lazy Senior Dev Mode**: Strictly enforces doing only what was asked. Zero unnecessary refactorings, zero overengineering. | 0 deps / 281 kB |
 | [`@langfuse/pi-observability-plugin`](https://www.npmjs.com/package/@langfuse/pi-observability-plugin) | **Enterprise Telemetry**: Full token breakdowns, cache hits, latency, and cost observability in Langfuse. | Minimal |
 | [`pi-web-access`](https://www.npmjs.com/package/pi-web-access) | **Context-Gated Web Access**: Real-time web search and documentation fetching, dynamically gated behind query intent. | Zero cold-start |
+| [`pi-ollama`](https://www.npmjs.com/package/pi-ollama) | **Native Ollama Provider**: Direct `/api/chat` connection, per-request context allocation (`num_ctx 32K`), prompt warm-up, and zero silent history truncation. | Native |
 
 ---
 

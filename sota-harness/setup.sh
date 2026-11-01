@@ -45,10 +45,12 @@ OPTIONS:
   --skills-only         Synchronize bundled Matt Pocock & custom skills only
   --extensions-only     Deploy SOTA Pi harness extensions only
   --config-only         Write NVIDIA SoL-Pi & Pi settings.json only
+  --ollama              Configure Ollama memory flags, bake 32K workhorse & install pi-ollama
   --check               Run environment diagnostic check without modifications
 
 EXAMPLES:
   ./setup.sh            # Complete end-to-end setup (recommended)
+  ./setup.sh --ollama   # Configure Ollama & bake 32K local workhorse
   ./setup.sh --skills   # Sync skills to ~/.agents/skills without touching extensions
   ./setup.sh --check    # Check current system readiness
 
@@ -61,6 +63,7 @@ EOF
 SKILLS_ONLY=false
 EXTENSIONS_ONLY=false
 CONFIG_ONLY=false
+OLLAMA_ONLY=false
 CHECK_ONLY=false
 
 for arg in "$@"; do
@@ -76,6 +79,9 @@ for arg in "$@"; do
       ;;
     --config|--config-only)
       CONFIG_ONLY=true
+      ;;
+    --ollama|--ollama-only)
+      OLLAMA_ONLY=true
       ;;
     --check)
       CHECK_ONLY=true
@@ -197,16 +203,61 @@ if [ "$SKILLS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
     echo -e "  ✔ ast-grep: ${GREEN}$(ast-grep --version)${RESET}"
   fi
 
-  # Check Ollama
+  # Check & Configure Ollama
   if command -v ollama >/dev/null 2>&1; then
     echo -e "  ✔ Ollama: ${GREEN}Detected${RESET}"
+
+    # Configure Ollama Memory Optimization Flags in Shell
+    SHELL_RC="${HOME}/.zshrc"
+    if [ ! -f "${SHELL_RC}" ]; then
+      SHELL_RC="${HOME}/.bashrc"
+    fi
+    if ! grep -q "OLLAMA_FLASH_ATTENTION" "${SHELL_RC}" 2>/dev/null; then
+      cat << 'EOF' >> "${SHELL_RC}"
+
+# --- Kobayashi Ollama Memory Flags (32K context in unified memory) ---
+export OLLAMA_FLASH_ATTENTION=1
+export OLLAMA_KV_CACHE_TYPE=q8_0
+export OLLAMA_NUM_PARALLEL=1
+export OLLAMA_MAX_LOADED_MODELS=2
+EOF
+      echo -e "  ✔ Injected Flash Attention & q8_0 KV Cache flags into ${GREEN}${SHELL_RC}${RESET}"
+    fi
+    export OLLAMA_FLASH_ATTENTION=1
+    export OLLAMA_KV_CACHE_TYPE=q8_0
+
     if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
       echo -e "  ✔ Ollama daemon: ${GREEN}Active on localhost:11434${RESET}"
+
+      # Check / bake 32K ornith-1.5:ctx
+      if ! ollama list 2>/dev/null | grep -q "ornith-1.5:ctx"; then
+        echo -e "  ${YELLOW}Baking 32K context model ornith-1.5:ctx...${RESET}"
+        if ! ollama list 2>/dev/null | grep -q "ornith-1.5:9b"; then
+          ollama pull robit/ornith-1.5:9b || true
+        fi
+        cat << 'EOF' > /tmp/Modelfile.kobayashi.ornith
+FROM robit/ornith-1.5:9b
+PARAMETER num_ctx 32768
+PARAMETER temperature 0.2
+EOF
+        ollama create ornith-1.5:ctx -f /tmp/Modelfile.kobayashi.ornith || true
+        rm -f /tmp/Modelfile.kobayashi.ornith
+        echo -e "  ✔ Created 32K context model: ${GREEN}ornith-1.5:ctx${RESET}"
+      else
+        echo -e "  ✔ Workhorse model ready: ${GREEN}ornith-1.5:ctx (32K context)${RESET}"
+      fi
     else
       echo -e "  ${YELLOW}[INFO] Ollama daemon is not currently running. Start it with 'ollama serve' when using local workhorse.${RESET}"
     fi
   else
     echo -e "  ${YELLOW}[INFO] Ollama not detected. If using pure cloud models, this can be skipped.${RESET}"
+  fi
+
+  if [ "${OLLAMA_ONLY}" = true ]; then
+    echo -e "\n${CYAN}Installing pi-ollama native extension...${RESET}"
+    pi install npm:pi-ollama
+    echo -e "\n${BOLD}${GREEN}✔ Ollama configuration & pi-ollama ready!${RESET}"
+    exit 0
   fi
 fi
 
@@ -314,6 +365,9 @@ pi install npm:@langfuse/pi-observability-plugin >/dev/null 2>&1 || true
 echo -e "  Installing pi-web-access (Context-Gated Web Search & Extraction)..."
 pi install npm:pi-web-access >/dev/null 2>&1 || true
 
+echo -e "  Installing pi-ollama (Native Ollama Provider, per-request context & warm-up)..."
+pi install npm:pi-ollama >/dev/null 2>&1 || true
+
 # 1. SoL-Pi Configuration
 SOL_PI_CONF="${PI_AGENT_DIR}/sol-pi.json"
 cat > "${SOL_PI_CONF}" << 'EOF'
@@ -340,7 +394,8 @@ cat > "${SETTINGS_CONF}" << 'EOF'
     "npm:pi-bedrock-mantle",
     "npm:@dietrichgebert/ponytail",
     "npm:@langfuse/pi-observability-plugin",
-    "npm:pi-web-access"
+    "npm:pi-web-access",
+    "npm:pi-ollama"
   ],
   "defaultProvider": "auto",
   "defaultModel": "planner-worker",
@@ -422,6 +477,7 @@ echo -e "  • ${BOLD}DeepSeek Minimal Seam${RESET}: Core engineering primitives
 echo -e "  • ${BOLD}NVIDIA SoL-Pi${RESET}: Observation eviction & compaction active with 12.5 cache ratio."
 echo -e "  • ${BOLD}Virtual Router${RESET}: Run with ${CYAN}--model auto/planner-worker${RESET} or ${CYAN}--model auto/bottom-up${RESET}."
 echo -e "  • ${BOLD}AST-grep Topology${RESET}: Run ${CYAN}repo_map({ query: '...' })${RESET} to outline codebases in < 800 tokens."
+echo -e "  • ${BOLD}Native Ollama (pi-ollama)${RESET}: Per-request context allocation (32K), warm-up, and zero silent truncation."
 echo -e "  • ${BOLD}Git Checkpoint${RESET}: Pre-turn git stash checkpoints for 1-click deterministic rollback.\n"
 
 echo -e "Try it now:"
