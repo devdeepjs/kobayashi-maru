@@ -1,7 +1,7 @@
 {
-  "name": "@kobayashi/harness",
-  "version": "0.1.0",
-  "description": "Token-efficient, multi-tier agent harness orchestrator for Pi with dynamic skill loading and progressive tool disclosure",
+  "name": "kobayashi-maru",
+  "version": "1.0.0",
+  "description": "Kobayashi Maru (小林丸): Zero-waste autonomous engineering runtime for Pi & open models. Dynamic BM25 Skill-RAG, NVIDIA SoL-Pi compaction, dual virtual model routing, and AST-grep codebase topology mapping.",
   "type": "module",
   "bin": {
     "kobayashi": "./dist/bin/kobayashi.js"

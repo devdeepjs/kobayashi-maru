@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "actionFusion": true,
+  "observationPack": true,
+  "evidencePreservingReducer": true,
+  "evidencePreservingReducerProvider": "bedrock-mantle",
+  "evidencePreservingReducerModel": "openai.gpt-5.6-luna",
+  "onlineContextCompact": true,
+  "cacheWriteReadRatio": 12.5
+}

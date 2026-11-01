@@ -3,8 +3,9 @@
   "packages": [
     "git:github.com/NVlabs/SoL-Pi",
     "npm:pi-bedrock-mantle",
-    "npm:pi-usage-dashboard",
-    "npm:pi-stats-dashboard"
+    "npm:@dietrichgebert/ponytail",
+    "npm:@langfuse/pi-observability-plugin",
+    "npm:pi-web-access"
   ],
   "defaultProvider": "bedrock-mantle",
   "defaultModel": "openai.gpt-5.6-luna",
