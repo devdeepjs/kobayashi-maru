@@ -193,9 +193,9 @@ Adding custom skills to Kobayashi Maru is completely friction-free. You **never 
 
 ---
 
-## 🚀 1-Command Installation & Setup CLI
+## 🚀 1-Command Installation & Interactive Setup Wizard
 
-Run the automated installer on macOS or Linux:
+Get from zero to running autonomous engineering agent in under 2 minutes:
 
 ```bash
 git clone https://github.com/devdeepjs/kobayashi-maru.git
@@ -203,16 +203,46 @@ cd kobayashi-maru
 ./setup.sh
 ```
 
+> [!TIP]
+> **Executive & Non-Hands-On Friendly**:  
+> Running `./setup.sh` directly in an interactive terminal launches a friendly setup wizard. It asks you which provider your team prefers (Bedrock Mantle, Direct Bedrock, Claude, OpenAI, Local Ollama, or Cursor/Proxies) and configures everything automatically.
+> 
+> For an executive overview of provider tradeoffs, see the [Executive Setup Guide](docs/EXECUTIVE_SETUP_GUIDE.md).
+
+### 📚 Dedicated Provider Setup Guides
+
+| Provider Architecture | Setup Guide | Typical Cost / Task | Key Models |
+| :--- | :--- | :---: | :--- |
+| **AWS Bedrock Mantle** (Recommended) | [docs/providers/bedrock-mantle.md](docs/providers/bedrock-mantle.md) | **$0.02 – $0.05** | `openai.gpt-5.6-luna`, `anthropic.claude-opus-5-5` |
+| **Direct AWS Bedrock** | [docs/providers/amazon-bedrock.md](docs/providers/amazon-bedrock.md) | **$0.15 – $0.35** | `us.anthropic.claude-sonnet-5-5`, `amazon.nova-pro` |
+| **Direct Anthropic Claude** *(See Caution)* | [docs/providers/anthropic-claude.md](docs/providers/anthropic-claude.md) | **$0.40 – $1.20** | `claude-3-7-sonnet-20250219`, `claude-3-5-haiku` |
+| **OpenAI & Codex** | [docs/providers/openai-codex.md](docs/providers/openai-codex.md) | **$0.10 – $0.45** | `gpt-4o`, `o1`, `o3-mini`, `codex` |
+| **Cursor & Custom Proxies** | [docs/providers/cursor-and-proxies.md](docs/providers/cursor-and-proxies.md) | Varies | OpenRouter, DeepSeek R1, Cursor endpoints |
+| **100% Free Local Workhorse** | [docs/providers/ollama.md](docs/providers/ollama.md) | **$0.0000** | `ornith-1.5:ctx` (32K in RAM / Apple Silicon) |
+
+> [!CAUTION]
+> **Enterprise Claude Token Billing Caution**:  
+> Direct Anthropic Claude models charge **$3.00/Mtok (input)** and **$15.00/Mtok (output)**. Standard agent harnesses dumping 30,000+ uncompacted tokens can easily cost **$5.00 to $15.00+ for a single ticket**.  
+> Kobayashi Maru's BM25 Skill-RAG and SoL-Pi compaction save 60%–80% of tokens, but for optimal cost control, we recommend running with `--model auto/planner-worker` so Claude only plans, while local Ornith 1.5 executes the code for $0.00.
+
+---
+
 ### Setup CLI Options
 
 [`./setup.sh`](setup.sh) provides flexible flags for different installation workflows:
 
 ```bash
-# Complete end-to-end setup (Installs runtime, syncs 38 skills, deploys extensions & config)
+# Guided interactive wizard (default in interactive terminal)
 ./setup.sh
 
-# Run non-destructive diagnostic check
+# Automated silent install with recommended defaults (CI / Docker)
+./setup.sh --yes
+
+# Non-destructive environment diagnostic check
 ./setup.sh --check
+
+# Configure Ollama unified memory flags & bake 32K workhorse
+./setup.sh --ollama
 
 # Synchronize Matt Pocock & custom skills to ~/.agents/skills only
 ./setup.sh --skills
@@ -220,7 +250,7 @@ cd kobayashi-maru
 # Deploy SOTA Pi extensions only (~/.pi/agent/extensions/)
 ./setup.sh --extensions
 
-# Write NVIDIA SoL-Pi & Pi settings.json configuration files only
+# Write configuration files only
 ./setup.sh --config
 
 # View CLI options

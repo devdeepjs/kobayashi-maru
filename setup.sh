@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# KOBAYASHI MARU - 1-COMMAND SOTA AGENT HARNESS SETUP
+# KOBAYASHI MARU - SOTA AGENT HARNESS & PI RUNTIME SETUP WIZARD
 # ==============================================================================
 # "I don't believe in the unwinnable scenario." — James T. Kirk
 #
-# Installs and configures the production-grade SOTA agent harness:
-# 1. System & Runtime Dependencies (Node.js, Git, ast-grep, Ollama, Pi)
-# 2. Bundled Matt Pocock 38-Skill Suite & Custom Skills Synchronization
+# Production-grade setup wizard for executives, tech leads, and developers:
+# 1. Interactive Provider Selection (Bedrock Mantle, Direct Bedrock, Claude, OpenAI, Local Ollama, Cursor/Proxy)
+# 2. Bundled Matt Pocock 38-Skill Suite Synchronization (~/.agents/skills)
 # 3. SRA Skill-RAG (Okapi BM25 Dynamic Capability Retrieval for 500+ skills)
 # 4. DeepSeek Minimal Seam (Lean active toolloadout, zero prompt bloat)
 # 5. NVIDIA SoL-Pi (Observation Compaction & Online Context Pruning)
 # 6. Dual Virtual Model Router (Frontier Planner + $0 Local Workhorse)
 # 7. AST-grep Repository Topology Mapper (v0.51 outline)
 # 8. Git Checkpoint Engine (Turn-boundary rollback)
-# 9. Vetted Extensions: @dietrichgebert/ponytail, @langfuse/pi-observability-plugin, pi-web-access
+# 9. Vetted Extensions: @dietrichgebert/ponytail, @langfuse/pi-observability-plugin, pi-web-access, pi-ollama
 # ==============================================================================
 
 set -euo pipefail
@@ -23,6 +23,7 @@ GREEN="\033[0;32m"
 CYAN="\033[0;36m"
 YELLOW="\033[1;33m"
 RED="\033[0;31m"
+MAGENTA="\033[0;35m"
 RESET="\033[0m"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,23 +36,34 @@ SKILLS_DIR="${HOME}/.agents/skills"
 # ------------------------------------------------------------------------------
 show_help() {
   cat << EOF
-Kobayashi Maru (小林丸) Setup CLI
+Kobayashi Maru (小林丸) Setup CLI & Provider Configurator
 
 USAGE:
   ./setup.sh [OPTIONS]
 
 OPTIONS:
-  -h, --help            Show this help guide and exit
+  -i, --interactive     Run guided interactive setup wizard (default in interactive terminal)
+  -y, --yes             Run non-interactive setup with recommended defaults
   --skills-only         Synchronize bundled Matt Pocock & custom skills only
   --extensions-only     Deploy SOTA Pi harness extensions only
   --config-only         Write NVIDIA SoL-Pi & Pi settings.json only
   --ollama              Configure Ollama memory flags, bake 32K workhorse & install pi-ollama
   --check               Run environment diagnostic check without modifications
+  -h, --help            Show this help guide and exit
+
+PROVIDER DOCUMENTATION:
+  Executive Guide:      docs/EXECUTIVE_SETUP_GUIDE.md
+  AWS Bedrock Mantle:   docs/providers/bedrock-mantle.md
+  Direct AWS Bedrock:   docs/providers/amazon-bedrock.md
+  Anthropic Claude:     docs/providers/anthropic-claude.md (Includes Enterprise Token Caution)
+  OpenAI & Codex:       docs/providers/openai-codex.md
+  Cursor & Proxies:     docs/providers/cursor-and-proxies.md
+  Local Ollama (\$0):   docs/providers/ollama.md
 
 EXAMPLES:
-  ./setup.sh            # Complete end-to-end setup (recommended)
+  ./setup.sh            # Guided interactive wizard
+  ./setup.sh --yes      # Automated silent install (recommended for CI / Docker)
   ./setup.sh --ollama   # Configure Ollama & bake 32K local workhorse
-  ./setup.sh --skills   # Sync skills to ~/.agents/skills without touching extensions
   ./setup.sh --check    # Check current system readiness
 
 DOCUMENTATION:
@@ -60,16 +72,30 @@ EOF
   exit 0
 }
 
+INTERACTIVE=false
+NON_INTERACTIVE=false
 SKILLS_ONLY=false
 EXTENSIONS_ONLY=false
 CONFIG_ONLY=false
 OLLAMA_ONLY=false
 CHECK_ONLY=false
 
+# If run directly with no arguments in an interactive terminal, default to interactive wizard
+if [ "$#" -eq 0 ] && [ -t 0 ]; then
+  INTERACTIVE=true
+fi
+
 for arg in "$@"; do
   case "$arg" in
     -h|--help)
       show_help
+      ;;
+    -i|--interactive)
+      INTERACTIVE=true
+      ;;
+    -y|--yes|--non-interactive)
+      NON_INTERACTIVE=true
+      INTERACTIVE=false
       ;;
     --skills|--skills-only)
       SKILLS_ONLY=true
@@ -169,7 +195,119 @@ if [ "$CHECK_ONLY" = true ]; then
   exit 0
 fi
 
-echo -e "${BOLD}Starting Kobayashi Maru SOTA Harness Setup...${RESET}\n"
+# ------------------------------------------------------------------------------
+# Provider Selection & Defaults
+# ------------------------------------------------------------------------------
+CHOSEN_PROVIDER="bedrock-mantle"
+CHOSEN_MODEL="openai.gpt-5.6-luna"
+CHOSEN_THINKING="medium"
+ENABLE_LOCAL_WORKHORSE=true
+CUSTOM_BASE_URL=""
+CUSTOM_API_KEY=""
+
+if [ "$INTERACTIVE" = true ]; then
+  echo -e "${BOLD}${MAGENTA}Welcome to the Kobayashi Maru Executive Setup Wizard!${RESET}"
+  echo -e "Answer a few quick questions to configure your team's autonomous engineering runtime.\n"
+
+  echo -e "${BOLD}Select your primary model provider architecture:${RESET}"
+  echo -e "  ${CYAN}[1] Hybrid Powertrain (Recommended)${RESET} — AWS Bedrock Mantle (Luna/Claude) + Local Ollama ($0.00 Workhorse)"
+  echo -e "  ${CYAN}[2] Direct AWS Bedrock${RESET}              — Official IAM & Bedrock (Sonnet 3.5/3.7, Nova, DeepSeek)"
+  echo -e "  ${CYAN}[3] Direct Anthropic Claude${RESET}         — Anthropic API Key or Web/OAuth Login (Includes Enterprise Caution)"
+  echo -e "  ${CYAN}[4] OpenAI / Codex${RESET}                  — GPT-4o, o1, o3-mini via OpenAI API Key"
+  echo -e "  ${CYAN}[5] 100% Free Local Workhorse${RESET}       — Local Ollama in RAM (Zero cloud credentials, 100% private)"
+  echo -e "  ${CYAN}[6] Cursor / OpenRouter / Custom${RESET}    — Any OpenAI-compatible gateway / proxy"
+  
+  read -r -p "Enter choice [1-6, default: 1]: " PROVIDER_CHOICE
+  PROVIDER_CHOICE="${PROVIDER_CHOICE:-1}"
+
+  case "$PROVIDER_CHOICE" in
+    1)
+      CHOSEN_PROVIDER="bedrock-mantle"
+      CHOSEN_MODEL="openai.gpt-5.6-luna"
+      CHOSEN_THINKING="medium"
+      echo -e "\n  ✔ Selected: ${GREEN}Hybrid Powertrain (Bedrock Mantle + Local Workhorse)${RESET}"
+      echo -e "  📖 Step-by-step guide: ${CYAN}docs/providers/bedrock-mantle.md${RESET}"
+      read -r -p "  Enter AWS_PROFILE [press Enter to use '${AWS_PROFILE:-default}']: " USER_AWS_PROFILE
+      if [ -n "$USER_AWS_PROFILE" ]; then
+        export AWS_PROFILE="$USER_AWS_PROFILE"
+      fi
+      ;;
+    2)
+      CHOSEN_PROVIDER="amazon-bedrock"
+      CHOSEN_MODEL="us.anthropic.claude-sonnet-5-5"
+      CHOSEN_THINKING="high"
+      echo -e "\n  ✔ Selected: ${GREEN}Direct AWS Bedrock${RESET}"
+      echo -e "  📖 Step-by-step guide: ${CYAN}docs/providers/amazon-bedrock.md${RESET}"
+      read -r -p "  Enter AWS_PROFILE [press Enter to use '${AWS_PROFILE:-default}']: " USER_AWS_PROFILE
+      if [ -n "$USER_AWS_PROFILE" ]; then
+        export AWS_PROFILE="$USER_AWS_PROFILE"
+      fi
+      ;;
+    3)
+      CHOSEN_PROVIDER="anthropic"
+      CHOSEN_MODEL="claude-3-7-sonnet-20250219"
+      CHOSEN_THINKING="high"
+      echo -e "\n  ✔ Selected: ${GREEN}Direct Anthropic Claude${RESET}"
+      echo -e "  ${YELLOW}${BOLD}⚠ ENTERPRISE CAUTION:${RESET} ${YELLOW}Claude charges \$3.00/Mtok in, \$15.00/Mtok out without prompt cache offsets."
+      echo -e "  Standard unoptimized runs can cost \$5–\$15+ per task. Kobayashi Maru's BM25 Skill-RAG"
+      echo -e "  and SoL-Pi compaction will save 60–80% of tokens, but consider pairing with a local workhorse.${RESET}"
+      echo -e "  📖 Step-by-step guide: ${CYAN}docs/providers/anthropic-claude.md${RESET}"
+      if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+        read -r -p "  Enter ANTHROPIC_API_KEY (press Enter if you will use 'pi auth login anthropic' or env var): " USER_KEY
+        if [ -n "$USER_KEY" ]; then
+          export ANTHROPIC_API_KEY="$USER_KEY"
+        fi
+      fi
+      ;;
+    4)
+      CHOSEN_PROVIDER="openai"
+      CHOSEN_MODEL="gpt-4o"
+      CHOSEN_THINKING="medium"
+      echo -e "\n  ✔ Selected: ${GREEN}OpenAI / Codex${RESET}"
+      echo -e "  📖 Step-by-step guide: ${CYAN}docs/providers/openai-codex.md${RESET}"
+      if [ -z "${OPENAI_API_KEY:-}" ]; then
+        read -r -p "  Enter OPENAI_API_KEY (press Enter to use existing env var): " USER_KEY
+        if [ -n "$USER_KEY" ]; then
+          export OPENAI_API_KEY="$USER_KEY"
+        fi
+      fi
+      ;;
+    5)
+      CHOSEN_PROVIDER="ollama"
+      CHOSEN_MODEL="ornith-1.5:ctx"
+      CHOSEN_THINKING="max"
+      ENABLE_LOCAL_WORKHORSE=true
+      echo -e "\n  ✔ Selected: ${GREEN}100% Free Local Workhorse (Ollama)${RESET}"
+      echo -e "  📖 Step-by-step guide: ${CYAN}docs/providers/ollama.md${RESET}"
+      ;;
+    6)
+      CHOSEN_PROVIDER="custom-proxy"
+      CHOSEN_MODEL="custom-model"
+      CHOSEN_THINKING="medium"
+      echo -e "\n  ✔ Selected: ${GREEN}Cursor / OpenRouter / Custom Proxy${RESET}"
+      echo -e "  📖 Step-by-step guide: ${CYAN}docs/providers/cursor-and-proxies.md${RESET}"
+      read -r -p "  Enter API Base URL [e.g. https://openrouter.ai/api/v1]: " CUSTOM_BASE_URL
+      read -r -p "  Enter API Key: " CUSTOM_API_KEY
+      read -r -p "  Enter Model ID [e.g. deepseek/deepseek-r1]: " CUSTOM_MODEL_ID
+      if [ -n "$CUSTOM_MODEL_ID" ]; then
+        CHOSEN_MODEL="$CUSTOM_MODEL_ID"
+      fi
+      ;;
+    *)
+      echo -e "  Defaulting to Hybrid Powertrain."
+      ;;
+  esac
+
+  echo ""
+  read -r -p "Enable Local Workhorse in RAM for \$0.00 compute on tests & edits? [Y/n, default: Y]: " WORKHORSE_CHOICE
+  WORKHORSE_CHOICE="${WORKHORSE_CHOICE:-Y}"
+  if [[ "$WORKHORSE_CHOICE" =~ ^[Nn] ]]; then
+    ENABLE_LOCAL_WORKHORSE=false
+  fi
+  echo ""
+fi
+
+echo -e "${BOLD}Starting Kobayashi Maru SOTA Harness Setup (${CHOSEN_PROVIDER})...${RESET}\n"
 
 # ------------------------------------------------------------------------------
 # 1. Dependency Checks
@@ -203,17 +341,18 @@ if [ "$SKILLS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
     echo -e "  ✔ ast-grep: ${GREEN}$(ast-grep --version)${RESET}"
   fi
 
-  # Check & Configure Ollama
-  if command -v ollama >/dev/null 2>&1; then
-    echo -e "  ✔ Ollama: ${GREEN}Detected${RESET}"
+  # Check & Configure Ollama if enabled
+  if [ "$ENABLE_LOCAL_WORKHORSE" = true ] || [ "$CHOSEN_PROVIDER" = "ollama" ]; then
+    if command -v ollama >/dev/null 2>&1; then
+      echo -e "  ✔ Ollama: ${GREEN}Detected${RESET}"
 
-    # Configure Ollama Memory Optimization Flags in Shell
-    SHELL_RC="${HOME}/.zshrc"
-    if [ ! -f "${SHELL_RC}" ]; then
-      SHELL_RC="${HOME}/.bashrc"
-    fi
-    if ! grep -q "OLLAMA_FLASH_ATTENTION" "${SHELL_RC}" 2>/dev/null; then
-      cat << 'EOF' >> "${SHELL_RC}"
+      # Configure Ollama Memory Optimization Flags in Shell
+      SHELL_RC="${HOME}/.zshrc"
+      if [ ! -f "${SHELL_RC}" ]; then
+        SHELL_RC="${HOME}/.bashrc"
+      fi
+      if ! grep -q "OLLAMA_FLASH_ATTENTION" "${SHELL_RC}" 2>/dev/null; then
+        cat << 'EOF' >> "${SHELL_RC}"
 
 # --- Kobayashi Ollama Memory Flags (32K context in unified memory) ---
 export OLLAMA_FLASH_ATTENTION=1
@@ -221,41 +360,42 @@ export OLLAMA_KV_CACHE_TYPE=q8_0
 export OLLAMA_NUM_PARALLEL=1
 export OLLAMA_MAX_LOADED_MODELS=2
 EOF
-      echo -e "  ✔ Injected Flash Attention & q8_0 KV Cache flags into ${GREEN}${SHELL_RC}${RESET}"
-    fi
-    export OLLAMA_FLASH_ATTENTION=1
-    export OLLAMA_KV_CACHE_TYPE=q8_0
+        echo -e "  ✔ Injected Flash Attention & q8_0 KV Cache flags into ${GREEN}${SHELL_RC}${RESET}"
+      fi
+      export OLLAMA_FLASH_ATTENTION=1
+      export OLLAMA_KV_CACHE_TYPE=q8_0
 
-    if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
-      echo -e "  ✔ Ollama daemon: ${GREEN}Active on localhost:11434${RESET}"
+      if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+        echo -e "  ✔ Ollama daemon: ${GREEN}Active on localhost:11434${RESET}"
 
-      # Check / bake 32K ornith-1.5:ctx
-      if ! ollama list 2>/dev/null | grep -q "ornith-1.5:ctx"; then
-        echo -e "  ${YELLOW}Baking 32K context model ornith-1.5:ctx...${RESET}"
-        if ! ollama list 2>/dev/null | grep -q "ornith-1.5:9b"; then
-          ollama pull robit/ornith-1.5:9b || true
-        fi
-        cat << 'EOF' > /tmp/Modelfile.kobayashi.ornith
+        # Check / bake 32K ornith-1.5:ctx
+        if ! ollama list 2>/dev/null | grep -q "ornith-1.5:ctx"; then
+          echo -e "  ${YELLOW}Baking 32K context model ornith-1.5:ctx...${RESET}"
+          if ! ollama list 2>/dev/null | grep -q "ornith-1.5:9b"; then
+            ollama pull robit/ornith-1.5:9b || true
+          fi
+          cat << 'EOF' > /tmp/Modelfile.kobayashi.ornith
 FROM robit/ornith-1.5:9b
 PARAMETER num_ctx 32768
 PARAMETER temperature 0.2
 EOF
-        ollama create ornith-1.5:ctx -f /tmp/Modelfile.kobayashi.ornith || true
-        rm -f /tmp/Modelfile.kobayashi.ornith
-        echo -e "  ✔ Created 32K context model: ${GREEN}ornith-1.5:ctx${RESET}"
+          ollama create ornith-1.5:ctx -f /tmp/Modelfile.kobayashi.ornith || true
+          rm -f /tmp/Modelfile.kobayashi.ornith
+          echo -e "  ✔ Created 32K context model: ${GREEN}ornith-1.5:ctx${RESET}"
+        else
+          echo -e "  ✔ Workhorse model ready: ${GREEN}ornith-1.5:ctx (32K context)${RESET}"
+        fi
       else
-        echo -e "  ✔ Workhorse model ready: ${GREEN}ornith-1.5:ctx (32K context)${RESET}"
+        echo -e "  ${YELLOW}[INFO] Ollama daemon is not running. Start with 'ollama serve' when using local workhorse.${RESET}"
       fi
     else
-      echo -e "  ${YELLOW}[INFO] Ollama daemon is not currently running. Start it with 'ollama serve' when using local workhorse.${RESET}"
+      echo -e "  ${YELLOW}[INFO] Ollama not found. Download from https://ollama.com if using local workhorse.${RESET}"
     fi
-  else
-    echo -e "  ${YELLOW}[INFO] Ollama not detected. If using pure cloud models, this can be skipped.${RESET}"
   fi
 
   if [ "${OLLAMA_ONLY}" = true ]; then
     echo -e "\n${CYAN}Installing pi-ollama native extension...${RESET}"
-    pi install npm:pi-ollama
+    pi install npm:pi-ollama >/dev/null 2>&1 || true
     echo -e "\n${BOLD}${GREEN}✔ Ollama configuration & pi-ollama ready!${RESET}"
     exit 0
   fi
@@ -368,6 +508,11 @@ pi install npm:pi-web-access >/dev/null 2>&1 || true
 echo -e "  Installing pi-ollama (Native Ollama Provider, per-request context & warm-up)..."
 pi install npm:pi-ollama >/dev/null 2>&1 || true
 
+if [ "$CHOSEN_PROVIDER" = "bedrock-mantle" ]; then
+  echo -e "  Installing pi-bedrock-mantle..."
+  pi install npm:pi-bedrock-mantle >/dev/null 2>&1 || true
+fi
+
 # 1. SoL-Pi Configuration
 SOL_PI_CONF="${PI_AGENT_DIR}/sol-pi.json"
 cat > "${SOL_PI_CONF}" << 'EOF'
@@ -386,9 +531,9 @@ echo -e "  ✔ Configured NVIDIA SoL-Pi: ${GREEN}${SOL_PI_CONF}${RESET}"
 
 # 2. Agent Settings
 SETTINGS_CONF="${PI_AGENT_DIR}/settings.json"
-cat > "${SETTINGS_CONF}" << 'EOF'
+cat > "${SETTINGS_CONF}" << EOF
 {
-  "$schema": "https://pi.dev/schemas/settings.schema.json",
+  "\$schema": "https://pi.dev/schemas/settings.schema.json",
   "packages": [
     "git:github.com/NVlabs/SoL-Pi",
     "npm:pi-bedrock-mantle",
@@ -397,9 +542,9 @@ cat > "${SETTINGS_CONF}" << 'EOF'
     "npm:pi-web-access",
     "npm:pi-ollama"
   ],
-  "defaultProvider": "auto",
-  "defaultModel": "planner-worker",
-  "defaultThinkingLevel": "medium",
+  "defaultProvider": "${CHOSEN_PROVIDER}",
+  "defaultModel": "${CHOSEN_MODEL}",
+  "defaultThinkingLevel": "${CHOSEN_THINKING}",
   "defaultTools": [
     "read",
     "bash",
@@ -416,12 +561,50 @@ cat > "${SETTINGS_CONF}" << 'EOF'
   }
 }
 EOF
-echo -e "  ✔ Configured Settings: ${GREEN}${SETTINGS_CONF}${RESET}"
+echo -e "  ✔ Configured Settings: ${GREEN}${SETTINGS_CONF}${RESET} (Default: ${CHOSEN_PROVIDER}/${CHOSEN_MODEL})"
 
-# 3. Models configuration (Ollama)
+# 3. Models configuration (Ollama & Custom Proxies)
 MODELS_CONF="${PI_AGENT_DIR}/models.json"
-if [ ! -f "${MODELS_CONF}" ]; then
-  cat > "${MODELS_CONF}" << 'EOF'
+if [ ! -f "${MODELS_CONF}" ] || [ -n "$CUSTOM_BASE_URL" ]; then
+  if [ -n "$CUSTOM_BASE_URL" ]; then
+    cat > "${MODELS_CONF}" << EOF
+{
+  "\$schema": "https://pi.dev/schemas/models.schema.json",
+  "providers": {
+    "custom-proxy": {
+      "baseUrl": "${CUSTOM_BASE_URL}",
+      "api": "openai-completions",
+      "apiKey": "${CUSTOM_API_KEY}",
+      "models": [
+        {
+          "id": "${CHOSEN_MODEL}",
+          "name": "Custom Model (${CHOSEN_MODEL})",
+          "contextWindow": 65536,
+          "maxTokens": 8192,
+          "reasoning": true
+        }
+      ]
+    },
+    "ollama": {
+      "baseUrl": "http://localhost:11434/v1",
+      "api": "openai-completions",
+      "apiKey": "ollama",
+      "models": [
+        {
+          "id": "ornith-1.5:ctx",
+          "name": "Ornith 1.5 (Local Custom 32K)",
+          "contextWindow": 32768,
+          "maxTokens": 8192,
+          "reasoning": true
+        }
+      ]
+    }
+  }
+}
+EOF
+    echo -e "  ✔ Configured Custom Proxy & Model Registry: ${GREEN}${MODELS_CONF}${RESET}"
+  else
+    cat > "${MODELS_CONF}" << 'EOF'
 {
   "$schema": "https://pi.dev/schemas/models.schema.json",
   "providers": {
@@ -448,7 +631,8 @@ if [ ! -f "${MODELS_CONF}" ]; then
   }
 }
 EOF
-  echo -e "  ✔ Configured Local Model Registry: ${GREEN}${MODELS_CONF}${RESET}"
+    echo -e "  ✔ Configured Local Model Registry: ${GREEN}${MODELS_CONF}${RESET}"
+  fi
 fi
 
 if [ "$CONFIG_ONLY" = true ]; then
@@ -471,8 +655,9 @@ echo -e "\n${BOLD}${GREEN}======================================================
 echo -e "${BOLD}${GREEN}✔ KOBAYASHI MARU HARNESS IS READY!${RESET}"
 echo -e "${BOLD}${GREEN}========================================================================${RESET}\n"
 
-echo -e "Runtime Features Active:"
-echo -e "  • ${BOLD}BM25 Skill-RAG${RESET}: ${SKILL_COUNT:-500+} skills indexed in memory; 0 cold-start tokens; auto-injected on match."
+echo -e "Active Configuration:"
+echo -e "  • ${BOLD}Primary Provider${RESET}: ${GREEN}${CHOSEN_PROVIDER}${RESET} (${CHOSEN_MODEL})"
+echo -e "  • ${BOLD}BM25 Skill-RAG${RESET}: ${SKILL_COUNT:-38+} skills indexed in memory; 0 cold-start tokens; auto-injected on match."
 echo -e "  • ${BOLD}DeepSeek Minimal Seam${RESET}: Core engineering primitives active; passive bloat hidden."
 echo -e "  • ${BOLD}NVIDIA SoL-Pi${RESET}: Observation eviction & compaction active with 12.5 cache ratio."
 echo -e "  • ${BOLD}Virtual Router${RESET}: Run with ${CYAN}--model auto/planner-worker${RESET} or ${CYAN}--model auto/bottom-up${RESET}."
@@ -484,3 +669,6 @@ echo -e "Try it now:"
 echo -e "  ${BOLD}pi --model auto/planner-worker -p \"Review the repo structure and explain main entrypoints\"${RESET}\n"
 echo -e "Or test a skill without token tax:"
 echo -e "  ${BOLD}pi -p \"Use /tdd to implement a thread-safe LRU cache with unit tests\"${RESET}\n"
+echo -e "Documentation & Provider Guides:"
+echo -e "  • Executive Guide:    ${CYAN}docs/EXECUTIVE_SETUP_GUIDE.md${RESET}"
+echo -e "  • Provider Guides:    ${CYAN}docs/providers/${RESET}\n"
