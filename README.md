@@ -99,7 +99,7 @@ kobayashi stats
 Detailed architectural specifications are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md):
 
 1. **Active Aerodynamics — BM25 Skill-RAG (`skill-rag.ts`)**: In-memory retrieval across 500+ skills; 0 cold-start tokens.
-2. **Lean Chassis — DeepSeek Minimal Seam**: Prunes passive tools from prompt schemas; context-gates web tools.
+2. **Lean Chassis — Minimal Tool Seam**: Prunes passive tools from prompt schemas; context-gates web tools.
 3. **Telemetry & Downforce — NVIDIA SoL-Pi Compaction (`sol-pi.json`)**: Chained tool merging, observation log eviction to disk, and prompt cache hygiene.
 4. **Hybrid Powertrain — Dual Virtual Model Router (`bottom-up-router.ts`)**: Seamless orchestration across any planner and worker model.
 5. **Radar & LiDAR — AST-grep Topology (`repo-mapper.ts`)**: Fast Rust AST symbol extraction in $< 800$ tokens.

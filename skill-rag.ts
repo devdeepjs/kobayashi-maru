@@ -103,7 +103,7 @@ export function findSkillFiles(dir: string, depth = 0, maxDepth = 3): string[] {
 }
 
 /**
- * F1 SRA Engine (Skill Retrieval Augmentation & DeepSeek Minimal Seam)
+ * F1 SRA Engine (Skill Retrieval Augmentation & Minimal Tool Seam)
  * 
  * 1. Supports 500+ skills in memory via BM25 (< 2ms index latency).
  * 2. On turn start (before_agent_start):
@@ -186,7 +186,7 @@ export default function (pi: ExtensionAPI) {
     const promptText = (event as any).prompt || (event as any).userPrompt || "";
     const isWebRequested = /\b(web|search|browse|fetch|url|http|https|docs|online|google|jira|atlassian)\b/i.test(promptText);
 
-    // 1. DeepSeek Minimal Seam: Filter noisy tools from the active model schema
+    // 1. Minimal Tool Seam: Filter noisy tools from the active model schema
     if (event.systemPromptOptions.selectedTools) {
       const PASSIVE_TOOLS = new Set([
         "fetch_budget_from_portkey",

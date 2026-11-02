@@ -8,7 +8,7 @@
 # 1. Interactive Provider Selection (Bedrock Mantle, Direct Bedrock, Claude, OpenAI, Local Ollama, Cursor/Proxy)
 # 2. Bundled Matt Pocock 38-Skill Suite Synchronization (~/.agents/skills)
 # 3. SRA Skill-RAG (Okapi BM25 Dynamic Capability Retrieval for 500+ skills)
-# 4. DeepSeek Minimal Seam (Lean active toolloadout, zero prompt bloat)
+# 4. Minimal Tool Seam (Lean active toolloadout, zero prompt bloat)
 # 5. NVIDIA SoL-Pi (Observation Compaction & Online Context Pruning)
 # 6. Dual Virtual Model Router (Frontier Planner + $0 Local Workhorse, any model customizable)
 # 7. AST-grep Repository Topology Mapper (v0.51 outline)
@@ -993,7 +993,7 @@ echo -e "  ${BOLD}npx kobayashi config${RESET}     (Real-time live model search 
 echo -e "Active Configuration:"
 echo -e "  • ${BOLD}Default Provider${RESET}: ${GREEN}${CHOSEN_PROVIDER}${RESET} (${CHOSEN_MODEL})"
 echo -e "  • ${BOLD}BM25 Skill-RAG${RESET}: ${SKILL_COUNT:-38+} skills indexed in memory; 0 cold-start tokens; auto-injected on match."
-echo -e "  • ${BOLD}DeepSeek Minimal Seam${RESET}: Core engineering primitives active; passive bloat hidden."
+echo -e "  • ${BOLD}Minimal Tool Seam${RESET}: Core engineering primitives active; passive bloat hidden."
 echo -e "  • ${BOLD}NVIDIA SoL-Pi${RESET}: Observation eviction & compaction active with 12.5 cache ratio."
 echo -e "  • ${BOLD}Virtual Router${RESET}: Run with ${CYAN}--model auto/planner-worker${RESET} or ${CYAN}--model auto/bottom-up${RESET}."
 echo -e "  • ${BOLD}AST-grep Topology${RESET}: Run ${CYAN}repo_map({ query: '...' })${RESET} to outline codebases in < 800 tokens."

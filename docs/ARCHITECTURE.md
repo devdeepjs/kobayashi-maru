@@ -8,7 +8,7 @@
 flowchart TD
     User["Developer Prompt / Ticket / Architecture Task"] --> SRA["Pillar 1: BM25 Skill-RAG<br/>Indexes 500+ skills in < 2ms<br/>Turn 0 / 'hi': 0 skills injected"]
     
-    SRA --> Seam["Pillar 2: DeepSeek Minimal Seam<br/>Prunes passive schemas<br/>Active: read, bash, edit, write, codemode"]
+    SRA --> Seam["Pillar 2: Minimal Tool Seam<br/>Prunes passive schemas<br/>Active: read, bash, edit, write, codemode"]
 
     Seam --> Router{"Pillar 4: Dual Virtual Router<br/>(Dynamic Config: Planner + Worker)"}
 
@@ -42,7 +42,7 @@ Kobayashi Maru implements **Zero-Dependency Skill Retrieval Augmentation (SRA)**
 
 ---
 
-## Pillar 2: Lean Chassis — DeepSeek Minimal Seam
+## Pillar 2: Lean Chassis — Minimal Tool Seam
 
 Inspired by DeepSeek's SWE-bench harness design:
 - Exposes only core engineering primitives: `read`, `bash`, `edit`, `write`, and `+codemode`.

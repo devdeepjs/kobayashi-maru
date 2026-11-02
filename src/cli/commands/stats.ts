@@ -257,7 +257,7 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
     );
   }
 
-  // Cyber DeepSeek-grade TUI Header
+  // F1 Pit Wall TUI Header
   console.log(chalk.hex("#38bdf8")("  ┌" + "─".repeat(73) + "┐"));
   const headerTitle = "KOBAYASHI MARU // F1 PIT WALL TELEMETRY & EFFICIENCY AUDIT";
   printCardLine(

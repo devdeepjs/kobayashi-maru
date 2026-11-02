@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Kobayashi Enterprise Observability & Telemetry HUD
- * Modeled after DeepSeek Harness OpenTelemetry (OTel) Grafana Suite
+ * Production F1 Pit Wall OpenTelemetry (OTel) Telemetry Engine
  * Port: 4200 (Default)
  */
 
@@ -667,7 +667,7 @@ const HTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Kobayashi // DeepSeek Harness OpenTelemetry Observability</title>
+<title>Kobayashi Maru // OpenTelemetry Observability</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -767,7 +767,7 @@ const HTML = `<!DOCTYPE html>
   .f1-bullet-title { font-weight: 700; color: var(--fg-default); font-size: 11px; margin-bottom: 1px; }
   .f1-bullet-desc { color: var(--fg-muted); font-size: 10.5px; line-height: 1.35; }
 
-  /* 6 KPI Cards Grid (Matches DeepSeek Harness Top Row) */
+  /* 6 KPI Cards Grid */
   .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
   .kpi-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; position: relative; }
   .kpi-title { font-size: 11px; font-weight: 600; color: var(--fg-muted); display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -870,7 +870,7 @@ const HTML = `<!DOCTYPE html>
   <main class="main-container">
 
     <!-- ========================================================================= -->
-    <!-- VIEW 1: FLEET TELEMETRY OVERVIEW (Matches DeepSeek Harness Screenshot)    -->
+    <!-- VIEW 1: FLEET TELEMETRY OVERVIEW    -->
     <!-- ========================================================================= -->
     <div id="view-overview">
       
@@ -2033,5 +2033,5 @@ server.on("error", (err) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`\n⚔️ Kobayashi DeepSeek-grade OTel Console live at: http://127.0.0.1:${PORT}`);
+  console.log(`\n⚔️ Kobayashi Maru F1 Pit Wall Telemetry Console live at: http://127.0.0.1:${PORT}`);
 });
