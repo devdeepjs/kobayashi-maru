@@ -1,7 +1,7 @@
 # Kobayashi Maru (小林丸) — Executive Setup & Provider Guide 🚀
 
 > **Target Audience**: VPs of Engineering, CTOs, Tech Leads, and Engineering Managers.  
-> **Objective**: Get your autonomous software engineering team from zero to SOTA runtime in under 2 minutes with enterprise cost controls.
+> **Objective**: Get your autonomous software engineering team running in under 2 minutes with enterprise cost controls.
 
 ---
 
@@ -44,7 +44,7 @@ Choose the architecture that aligns with your organization's cloud infrastructur
 | :--- | :--- | :---: | :--- | :--- |
 | **1. Hybrid Powertrain (Recommended)**<br/>*(Bedrock Mantle + Local Ollama)* | Enterprise teams seeking maximum accuracy at minimum cost. | **$0.02 – $0.05**<br/>*(-95% vs Claude Code)* | Code edits stay in local RAM. Only planning prompts hit authenticated AWS Bedrock. | [Bedrock Mantle Guide](providers/bedrock-mantle.md) |
 | **2. Direct AWS Bedrock**<br/>*(Claude 3.7 / Nova / DeepSeek)* | Organizations with existing AWS commitments and strict IAM governance. | **$0.15 – $0.35**<br/>*(-65% vs Claude Code)* | 100% within your corporate AWS VPC / account. No external data transfer. | [AWS Bedrock Guide](providers/amazon-bedrock.md) |
-| **3. Direct Anthropic Claude**<br/>*(Claude 3.7 Sonnet / Opus)* | Teams prioritizing bleeding-edge Anthropic reasoning capabilities directly. | **$0.40 – $1.20**<br/>*(Requires Token Caution)* | Direct Anthropic API key or web login. Multi-turn sessions bill tokens aggressively. | [Anthropic Claude Guide](providers/anthropic-claude.md) |
+| **3. Direct Anthropic Claude**<br/>*(Claude 3.7 Sonnet / Opus)* | Teams prioritizing advanced Anthropic reasoning capabilities directly. | **$0.40 – $1.20**<br/>*(Requires Token Caution)* | Direct Anthropic API key or web login. Multi-turn sessions bill tokens aggressively. | [Anthropic Claude Guide](providers/anthropic-claude.md) |
 | **4. OpenAI / Codex**<br/>*(GPT-4o, o1, o3-mini)* | Teams with enterprise OpenAI agreements or ChatGPT Enterprise seats. | **$0.10 – $0.45** | SOC2 compliant through enterprise OpenAI contract. | [OpenAI / Codex Guide](providers/openai-codex.md) |
 | **5. 100% Local ($0.00 Zero-Cost)**<br/>*(Ollama / Apple Silicon)* | Strict air-gapped security, zero cloud budget, or offline development. | **$0.0000**<br/>*(100% Free)* | 100% on-device Metal GPU / RAM. Zero bytes leave the machine. | [Local Ollama Guide](providers/ollama.md) |
 | **6. Cursor / OpenRouter / Custom Proxies**<br/>*(OpenAI-compatible)* | Teams using Cursor, OpenRouter, or internal LLM gateway proxies. | Varies by upstream model | Configurable through your gateway. | [Cursor & Proxies Guide](providers/cursor-and-proxies.md) |

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# KOBAYASHI MARU - SOTA AGENT HARNESS & PI RUNTIME SETUP WIZARD
+# KOBAYASHI MARU - AGENT HARNESS & PI RUNTIME SETUP WIZARD
 # ==============================================================================
 # "I don't believe in the unwinnable scenario." — James T. Kirk
 #
@@ -45,7 +45,7 @@ OPTIONS:
   -i, --interactive     Run guided interactive setup wizard (default in interactive terminal)
   -y, --yes             Run non-interactive setup with recommended defaults
   --skills-only         Synchronize bundled Matt Pocock & custom skills only
-  --extensions-only     Deploy SOTA Pi harness extensions only
+  --extensions-only     Deploy Pi harness extensions only
   --config-only         Write NVIDIA SoL-Pi & Pi settings.json only
   --ollama              Configure Ollama memory flags, bake 32K workhorse & install pi-ollama
   --check               Run environment diagnostic check without modifications
@@ -184,7 +184,7 @@ if [ "$CHECK_ONLY" = true ]; then
     echo -e "${YELLOW}0 installed${RESET}"
   fi
 
-  echo -n "  SOTA Extensions: "
+  echo -n "  Harness Extensions: "
   if [ -f "${EXTENSIONS_DIR}/skill-rag.ts" ] && [ -f "${EXTENSIONS_DIR}/bottom-up-router.ts" ]; then
     echo -e "${GREEN}Active in ~/.pi/agent/extensions/${RESET}"
   else
@@ -307,7 +307,7 @@ if [ "$INTERACTIVE" = true ]; then
   echo ""
 fi
 
-echo -e "${BOLD}Starting Kobayashi Maru SOTA Harness Setup (${CHOSEN_PROVIDER})...${RESET}\n"
+echo -e "${BOLD}Starting Kobayashi Maru Harness Setup (${CHOSEN_PROVIDER})...${RESET}\n"
 
 # ------------------------------------------------------------------------------
 # 1. Dependency Checks
@@ -462,7 +462,7 @@ fi
 # 5. Deploy Kobayashi Extensions
 # ------------------------------------------------------------------------------
 if [ "$CONFIG_ONLY" = false ]; then
-  echo -e "\n${CYAN}[5/7] Deploying Kobayashi SOTA Extensions...${RESET}"
+  echo -e "\n${CYAN}[5/7] Deploying Kobayashi Runtime Extensions...${RESET}"
 
   deploy_extension() {
     local file="$1"
@@ -493,7 +493,7 @@ fi
 # ------------------------------------------------------------------------------
 # 6. Configure Packages & Settings
 # ------------------------------------------------------------------------------
-echo -e "\n${CYAN}[6/7] Installing SOTA packages & writing configurations...${RESET}"
+echo -e "\n${CYAN}[6/7] Installing vetted packages & writing configurations...${RESET}"
 
 # Install vetted packages into Pi
 echo -e "  Installing @dietrichgebert/ponytail (Lazy Senior Dev Mode)..."

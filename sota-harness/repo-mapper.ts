@@ -1,5 +1,5 @@
 /**
- * SOTA Repository Topology & AST Outline Extension for Pi
+ * Repository Topology & AST Outline Extension for Pi
  *
  * Uses Rust-powered `ast-grep outline` (with automatic lexical fallback)
  * to extract exact class, interface, method, and import signatures in milliseconds for $0.
@@ -46,7 +46,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool({
     name: "repo_map",
-    label: "SOTA AST Repository Map & Symbol Outline",
+    label: "AST Repository Map & Symbol Outline",
     description: "Generates an exact Abstract Syntax Tree signature map of the codebase for $0 using ast-grep/Tree-sitter. Extracts classes, methods, imports, and exports without file body bloat, saving 90%+ in exploratory tokens.",
     parameters: {
       type: "object",

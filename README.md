@@ -247,7 +247,7 @@ cd kobayashi-maru
 # Synchronize Matt Pocock & custom skills to ~/.agents/skills only
 ./setup.sh --skills
 
-# Deploy SOTA Pi extensions only (~/.pi/agent/extensions/)
+# Deploy Pi extensions only (~/.pi/agent/extensions/)
 ./setup.sh --extensions
 
 # Write configuration files only
@@ -261,7 +261,7 @@ cd kobayashi-maru
 1. **System & Toolchain Checks**: Verifies Node.js (>= 20.x), Git, and installs `ast-grep` via Homebrew / npm.
 2. **Pi Runtime Verification**: Checks or installs `@earendil-works/pi-coding-agent`.
 3. **Skills Suite Synchronization**: Copies the 38 Matt Pocock skills from `.agents/skills/` into `~/.agents/skills/`.
-4. **Extension Deployment**: Deploys the 4 SOTA extensions into `~/.pi/agent/extensions/`:
+4. **Extension Deployment**: Deploys the 4 runtime extensions into `~/.pi/agent/extensions/`:
    - [`skill-rag.ts`](skill-rag.ts) (Zero-token Skill-RAG & Minimal Seam)
    - [`bottom-up-router.ts`](bottom-up-router.ts) (Dual Virtual Model Router)
    - [`repo-mapper.ts`](repo-mapper.ts) (AST Codebase Topology Mapper)
