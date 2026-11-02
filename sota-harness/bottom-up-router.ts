@@ -249,6 +249,15 @@ export default function (pi: ExtensionAPI) {
         ? { ...request.state }
         : { phase: "planner", turnCount: 0, workerFailures: 0 };
 
+      // 1. Retry failover: If the worker failed (e.g. Ollama daemon offline or error), failover to planner immediately
+      if (request.reason === "retry" && request.failed && workerModel && request.failed.model.id === workerModel.id) {
+        state.phase = "escalated";
+        state.escalationReason = `Worker failed: ${request.failed.message?.errorMessage || "Service offline"}. Failover to planner.`;
+        if (plannerModel) {
+          return { model: plannerModel, thinkingLevel: config.planner.thinking ?? "low", state };
+        }
+      }
+
       state.turnCount++;
 
       // Check tool results
@@ -347,6 +356,15 @@ export default function (pi: ExtensionAPI) {
       }
 
       const state: RouterState = request.state ? { ...request.state } : { phase: "workhorse", failures: 0 };
+
+      // 1. Retry failover: If the worker failed on retry, failover to planner immediately
+      if (request.reason === "retry" && request.failed && workerModel && request.failed.model.id === workerModel.id) {
+        state.phase = "frontier";
+        state.escalationReason = `Worker failed: ${request.failed.message?.errorMessage || "Service offline"}. Failover to planner.`;
+        if (plannerModel) {
+          return { model: plannerModel, thinkingLevel: config.planner.thinking ?? "medium", state };
+        }
+      }
 
       if (request.reason === "user" && userRequestedFrontier(request.messages)) {
         state.phase = "frontier";

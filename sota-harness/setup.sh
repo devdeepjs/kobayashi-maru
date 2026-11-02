@@ -334,8 +334,8 @@ fi
 # ------------------------------------------------------------------------------
 # Omnichannel Provider Configuration (All Providers Enabled & Ready)
 # ------------------------------------------------------------------------------
-CHOSEN_PROVIDER="bedrock-mantle"
-CHOSEN_MODEL="openai.gpt-5.6-luna"
+CHOSEN_PROVIDER="auto"
+CHOSEN_MODEL="planner-worker"
 CHOSEN_THINKING="medium"
 ENABLE_LOCAL_WORKHORSE=true
 
@@ -372,44 +372,56 @@ echo -e "  ${GREEN}✔ [5] Local Ollama (\$0 RAM)${RESET}  — ornith-1.5:ctx, d
 echo -e "  ${GREEN}✔ [6] Cursor & OpenRouter${RESET}     — OpenRouter DeepSeek R1 & Cursor-compatible proxy endpoints\n"
 
 if [ "$INTERACTIVE" = true ]; then
-  echo -e "${BOLD}Default Starting Model:${RESET} [press Enter for recommended Bedrock Mantle (Luna)]"
-  echo -e "  ${CYAN}[1] Bedrock Mantle (Luna)${RESET}     — openai.gpt-5.6-luna (Recommended default)"
-  echo -e "  ${CYAN}[2] Direct Bedrock (Sonnet)${RESET}   — us.anthropic.claude-sonnet-5-5"
-  echo -e "  ${CYAN}[3] Direct Claude (Sonnet 3.7)${RESET}— claude-3-7-sonnet-20250219"
-  echo -e "  ${CYAN}[4] OpenAI (GPT-4o)${RESET}           — gpt-4o"
-  echo -e "  ${CYAN}[5] Local Ollama (\$0 Workhorse)${RESET}— ornith-1.5:ctx"
-  echo -e "  ${CYAN}[6] OpenRouter (DeepSeek R1)${RESET}  — deepseek/deepseek-r1"
+  echo -e "${BOLD}Default Starting Model:${RESET} [press Enter for recommended Dual Virtual Router]"
+  echo -e "  ${CYAN}[1] Kobayashi Dual Virtual Router${RESET} — auto/planner-worker (Planner: Mantle Luna + Worker: \$0 Local Ollama) [RECOMMENDED]"
+  echo -e "  ${CYAN}[2] Bottom-Up Virtual Router${RESET}     — auto/bottom-up (\$0 Local Workhorse first -> Planner on failure)"
+  echo -e "  ${CYAN}[3] Bedrock Mantle (Luna)${RESET}        — openai.gpt-5.6-luna (Direct)"
+  echo -e "  ${CYAN}[4] Direct Bedrock (Sonnet)${RESET}      — us.anthropic.claude-sonnet-5-5"
+  echo -e "  ${CYAN}[5] Direct Claude (Sonnet 3.7)${RESET}   — claude-3-7-sonnet-20250219"
+  echo -e "  ${CYAN}[6] OpenAI (GPT-4o)${RESET}              — gpt-4o"
+  echo -e "  ${CYAN}[7] Local Ollama (\$0 Workhorse)${RESET}   — ornith-1.5:ctx"
+  echo -e "  ${CYAN}[8] OpenRouter (DeepSeek R1)${RESET}     — deepseek/deepseek-r1"
 
-  read -r -p "Select starting default [1-6, press Enter for Bedrock Mantle]: " DEFAULT_CHOICE
+  read -r -p "Select starting default [1-8, press Enter for Dual Virtual Router]: " DEFAULT_CHOICE
   DEFAULT_CHOICE="${DEFAULT_CHOICE:-1}"
 
   case "$DEFAULT_CHOICE" in
     1)
+      CHOSEN_PROVIDER="auto"
+      CHOSEN_MODEL="planner-worker"
+      CHOSEN_THINKING="medium"
+      ;;
+    2)
+      CHOSEN_PROVIDER="auto"
+      CHOSEN_MODEL="bottom-up"
+      CHOSEN_THINKING="off"
+      ;;
+    3)
       CHOSEN_PROVIDER="bedrock-mantle"
       CHOSEN_MODEL="openai.gpt-5.6-luna"
       CHOSEN_THINKING="medium"
       ;;
-    2)
+    4)
       CHOSEN_PROVIDER="amazon-bedrock"
       CHOSEN_MODEL="us.anthropic.claude-sonnet-5-5"
       CHOSEN_THINKING="high"
       ;;
-    3)
+    5)
       CHOSEN_PROVIDER="anthropic"
       CHOSEN_MODEL="claude-3-7-sonnet-20250219"
       CHOSEN_THINKING="high"
       ;;
-    4)
+    6)
       CHOSEN_PROVIDER="openai"
       CHOSEN_MODEL="gpt-4o"
       CHOSEN_THINKING="medium"
       ;;
-    5)
+    7)
       CHOSEN_PROVIDER="ollama"
       CHOSEN_MODEL="ornith-1.5:ctx"
       CHOSEN_THINKING="max"
       ;;
-    6)
+    8)
       CHOSEN_PROVIDER="openrouter"
       CHOSEN_MODEL="deepseek/deepseek-r1"
       CHOSEN_THINKING="high"
