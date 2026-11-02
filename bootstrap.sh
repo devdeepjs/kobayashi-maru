@@ -91,7 +91,11 @@ fi
 
 # --- 5. INSTALL KOBAYASHI DEPENDENCIES ---
 echo -e "\n${BOLD}[5/6] Building Kobayashi CLI...${RESET}"
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ "${BASH_SOURCE[0]}" != "bash" ] && [ "${BASH_SOURCE[0]}" != "sh" ]; then
+  DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+else
+  DIR="$(pwd)"
+fi
 cd "$DIR"
 npm install --silent
 npm run build --silent || true

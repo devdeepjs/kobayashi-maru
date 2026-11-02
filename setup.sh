@@ -26,10 +26,29 @@ RED="\033[0;31m"
 MAGENTA="\033[0;35m"
 RESET="\033[0m"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Safe resolution of script directory even when executed via curl | bash
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ "${BASH_SOURCE[0]}" != "bash" ] && [ "${BASH_SOURCE[0]}" != "sh" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+else
+  SCRIPT_DIR="$(pwd)"
+fi
+
 PI_AGENT_DIR="${HOME}/.pi/agent"
 EXTENSIONS_DIR="${PI_AGENT_DIR}/extensions"
 SKILLS_DIR="${HOME}/.agents/skills"
+
+# Detect a working git binary that can actually execute on this CPU architecture
+find_working_git() {
+  for g in "git" "/usr/bin/git" "/opt/homebrew/bin/git" "/usr/local/bin/git"; do
+    if command -v "$g" >/dev/null 2>&1; then
+      if "$g" --version >/dev/null 2>&1; then
+        echo "$g"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
 
 # ------------------------------------------------------------------------------
 # Help & Argument Parsing
@@ -149,12 +168,47 @@ fi
 if [ ! -f "${SCRIPT_DIR}/skill-rag.ts" ] && [ ! -f "${SCRIPT_DIR}/sota-harness/skill-rag.ts" ]; then
   REMOTE_TARGET="${HOME}/.kobayashi-maru"
   echo -e "${CYAN}Remote execution detected. Syncing repository into ${REMOTE_TARGET}...${RESET}"
-  if [ -d "${REMOTE_TARGET}/.git" ]; then
-    git -C "${REMOTE_TARGET}" pull --quiet || true
-  else
-    git clone --quiet https://github.com/devdeepjs/kobayashi-maru.git "${REMOTE_TARGET}"
+
+  GIT_BIN="$(find_working_git || true)"
+  SYNCED=false
+
+  if [ -n "$GIT_BIN" ]; then
+    if [ -d "${REMOTE_TARGET}/.git" ]; then
+      if "$GIT_BIN" -C "${REMOTE_TARGET}" pull --quiet 2>/dev/null; then
+        SYNCED=true
+      fi
+    else
+      if "$GIT_BIN" clone --quiet https://github.com/devdeepjs/kobayashi-maru.git "${REMOTE_TARGET}" 2>/dev/null; then
+        SYNCED=true
+      fi
+    fi
   fi
-  SCRIPT_DIR="${REMOTE_TARGET}"
+
+  if [ "$SYNCED" = false ]; then
+    echo -e "  Syncing via HTTPS archive download (curl + tar)..."
+    mkdir -p "${REMOTE_TARGET}"
+    if curl -fsSL https://github.com/devdeepjs/kobayashi-maru/archive/refs/heads/main.tar.gz | tar -xz -C "${REMOTE_TARGET}" --strip-components=1 2>/dev/null; then
+      SYNCED=true
+    else
+      echo -e "  ${RED}[ERROR] Failed to download repository archive. Please check your internet connection.${RESET}"
+      exit 1
+    fi
+  fi
+
+  # Transfer execution to the cloned/downloaded script on disk
+  if [ -f "${REMOTE_TARGET}/setup.sh" ]; then
+    chmod +x "${REMOTE_TARGET}/setup.sh"
+    if [ -t 0 ]; then
+      exec bash "${REMOTE_TARGET}/setup.sh" "$@"
+    elif [ -c /dev/tty ]; then
+      exec bash "${REMOTE_TARGET}/setup.sh" "$@" < /dev/tty
+    else
+      exec bash "${REMOTE_TARGET}/setup.sh" --yes "$@"
+    fi
+  else
+    echo -e "  ${RED}[ERROR] setup.sh missing from ${REMOTE_TARGET}.${RESET}"
+    exit 1
+  fi
 fi
 
 # Uninstall / Clean Reset Handler
@@ -201,10 +255,11 @@ if [ "$CHECK_ONLY" = true ]; then
   fi
 
   echo -n "  Git: "
-  if command -v git >/dev/null 2>&1; then
-    echo -e "${GREEN}$(git --version)${RESET}"
+  GIT_CMD="$(find_working_git || true)"
+  if [ -n "$GIT_CMD" ]; then
+    echo -e "${GREEN}$($GIT_CMD --version)${RESET}"
   else
-    echo -e "${RED}NOT FOUND${RESET}"
+    echo -e "${YELLOW}NOT FUNCTIONAL (Broken git in PATH; install Xcode CLT or brew git)${RESET}"
   fi
 
   echo -n "  ast-grep: "
@@ -378,11 +433,13 @@ if [ "$SKILLS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
   NODE_VERSION=$(node -v)
   echo -e "  ✔ Node.js: ${GREEN}${NODE_VERSION}${RESET}"
 
-  if ! command -v git >/dev/null 2>&1; then
-    echo -e "${RED}[ERROR] Git is required.${RESET}"
-    exit 1
+  GIT_CMD="$(find_working_git || true)"
+  if [ -n "$GIT_CMD" ]; then
+    echo -e "  ✔ Git: ${GREEN}$($GIT_CMD --version)${RESET}"
+  else
+    echo -e "  ${YELLOW}[WARNING] Working git binary not detected in PATH.${RESET}"
+    echo -e "  (Git checkpoint engine will be bypassed until 'xcode-select --install' or 'brew install git' is run)."
   fi
-  echo -e "  ✔ Git: ${GREEN}$(git --version)${RESET}"
 
   # Check or install ast-grep
   if ! command -v ast-grep >/dev/null 2>&1; then

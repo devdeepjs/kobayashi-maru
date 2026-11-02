@@ -198,11 +198,13 @@ Adding custom skills to Kobayashi Maru is completely friction-free. You **never 
 
 Get from zero to running autonomous engineering agent in under 2 minutes:
 
+#### Option 1: Fast One-Liner Direct Install (Recommended)
 ```bash
-# Option 1: One-liner direct install
 curl -fsSL https://raw.githubusercontent.com/devdeepjs/kobayashi-maru/main/setup.sh | bash
+```
 
-# Option 2: Clone and inspect locally
+#### Option 2: Clone and Inspect Locally
+```bash
 git clone https://github.com/devdeepjs/kobayashi-maru.git
 cd kobayashi-maru
 ./setup.sh
