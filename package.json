@@ -10,6 +10,9 @@
     "start": "tsx bin/kobayashi.ts start",
     "apply": "tsx bin/kobayashi.ts apply",
     "doctor": "tsx bin/kobayashi.ts doctor",
+    "stats": "tsx bin/kobayashi.ts stats",
+    "telemetry": "tsx bin/kobayashi.ts stats",
+    "telemetry:web": "tsx bin/kobayashi.ts stats --web",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc"

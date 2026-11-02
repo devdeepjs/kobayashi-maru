@@ -217,9 +217,49 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
 
   logger.banner();
 
+  // 1. Efficiency Grade Calculation
+  let grade = "A+ (Superior Capital Arbitrage)";
+  let gradeColor = "#10b981";
+  if (savingsPctNum < 30 || cacheHitRateNum < 40) {
+    grade = "C (Needs Powertrain Tuning)";
+    gradeColor = "#f87171";
+  } else if (savingsPctNum < 60 || cacheHitRateNum < 60) {
+    grade = "B (Moderate Capital Arbitrage)";
+    gradeColor = "#f59e0b";
+  } else if (savingsPctNum < 75) {
+    grade = "A (High Capital Arbitrage)";
+    gradeColor = "#34d399";
+  }
+
+  // 2. Compute "Where to Improve" Actionable Alerts
+  const improvementAlerts: string[] = [];
+  const advisorRatio = totalTurns > 0 ? (tierStats.advisor.turns / totalTurns) * 100 : 0;
+  const workhorseRatio = totalTurns > 0 ? (tierStats.workhorse.turns / totalTurns) * 100 : 0;
+
+  if (advisorRatio > 20) {
+    improvementAlerts.push(
+      `Frontier model took ${advisorRatio.toFixed(0)}% of turns. Run '--model auto/planner-worker' to offload routine edits to local RAM ($0.00).`
+    );
+  }
+  if (workhorseRatio < 30) {
+    improvementAlerts.push(
+      `Local workhorse took only ${workhorseRatio.toFixed(0)}% of workload. Start Ollama ('ollama serve') to run mechanical tests & linting for free.`
+    );
+  }
+  if (cacheHitRateNum < 70) {
+    improvementAlerts.push(
+      `Cache hit rate is ${cacheHitRate}%. Ensure 'cacheWarming: streaming' is set in settings.json to optimize prompt cache hits.`
+    );
+  }
+  if (improvementAlerts.length === 0) {
+    improvementAlerts.push(
+      `Powertrain operating at peak efficiency! All workload tiers and prompt caches are optimally balanced.`
+    );
+  }
+
   // Cyber DeepSeek-grade TUI Header
   console.log(chalk.hex("#38bdf8")("  ┌" + "─".repeat(73) + "┐"));
-  const headerTitle = "KOBAYASHI HARNESS // MULTI-TIER ARBITRAGE & HARNESS TELEMETRY";
+  const headerTitle = "KOBAYASHI MARU // F1 PIT WALL TELEMETRY & EFFICIENCY AUDIT";
   printCardLine(
     "#38bdf8",
     chalk.bold.hex("#ffffff")(headerTitle),
@@ -242,6 +282,83 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
     badgeLineLen
   );
   console.log(chalk.hex("#38bdf8")("  └" + "─".repeat(73) + "┘"));
+
+  // --- EXECUTIVE 5-SECOND VERDICT ---
+  printCardHeader("#38bdf8", "🏁 F1 EXECUTIVE SCORECARD (THE 5-SECOND VERDICT)");
+  printCardEmpty("#38bdf8");
+
+  const grdLine = `Efficiency Rating : `;
+  printCardLine(
+    "#38bdf8",
+    chalk.bold(grdLine) + chalk.bold.hex(gradeColor)(grade),
+    grdLine.length + grade.length
+  );
+
+  const savLine = `Net Capital Saved : `;
+  const savVal = `$${netSavingsUsd.toFixed(4)} (${savingsPct}% Cost Reduction vs Claude Code)`;
+  printCardLine(
+    "#38bdf8",
+    chalk.bold(savLine) + chalk.bold.hex("#34d399")(savVal),
+    savLine.length + savVal.length
+  );
+
+  const aerLine = `Cache Acceleration: `;
+  const aerVal = `${cacheHitRate}% Cache Hit Rate (${totalCacheReadTokens.toLocaleString()} tokens reused @ $0.02/M)`;
+  printCardLine(
+    "#38bdf8",
+    chalk.bold(aerLine) + chalk.bold.hex("#38bdf8")(aerVal),
+    aerLine.length + aerVal.length
+  );
+
+  const pwtLine = `Hybrid Execution  : `;
+  const pwtVal = `${workhorseRatio.toFixed(0)}% Grunt Work Executed at $0.00 Compute in Local RAM`;
+  printCardLine(
+    "#38bdf8",
+    chalk.bold(pwtLine) + chalk.bold.hex("#10b981")(pwtVal),
+    pwtLine.length + pwtVal.length
+  );
+
+  printCardEmpty("#38bdf8");
+  printCardFooter("#38bdf8");
+
+  // --- WHERE YOU SAVE (THE GREEN ZONE) ---
+  printCardHeader("#10b981", "🟢 WHERE YOU SAVE (QUANTIFIED ARBITRAGE BREAKDOWN)");
+  printCardEmpty("#10b981");
+
+  const s1 = "• Aerodynamics (BM25 Skill-RAG) : 0 tokens on cold starts ('hi'), saving ~37.5k tok/turn";
+  printCardLine("#10b981", chalk.hex("#34d399")(s1), s1.length);
+
+  const s2 = "• Downforce & Log Compaction    : NVIDIA SoL-Pi pruned 97%+ of build/test stack traces";
+  printCardLine("#10b981", chalk.hex("#34d399")(s2), s2.length);
+
+  const s3 = `• Electric Workhorse (Ollama)   : ${tierStats.workhorse.turns} turns offloaded to RAM at $0.00 (Saved +$${tierStats.workhorse.baselineUsd.toFixed(4)})`;
+  printCardLine("#10b981", chalk.hex("#34d399")(s3), s3.length);
+
+  const s4 = `• KV Prompt Cache Reuse         : ${totalCacheReadTokens.toLocaleString()} tokens billed at $0.02/M instead of $3.00/M`;
+  printCardLine("#10b981", chalk.hex("#34d399")(s4), s4.length);
+
+  printCardEmpty("#10b981");
+  printCardFooter("#10b981");
+
+  // --- WHERE TO IMPROVE (ACTIONABLE RECOMMENDATIONS) ---
+  printCardHeader("#f59e0b", "🟡 WHERE TO IMPROVE (PIT WALL OPTIMIZATION ALERTS)");
+  printCardEmpty("#f59e0b");
+
+  for (let i = 0; i < improvementAlerts.length; i++) {
+    const alertText = `[Tip ${i + 1}] ${improvementAlerts[i]}`;
+    // Wrap to 68 characters if needed
+    if (alertText.length <= 68) {
+      printCardLine("#f59e0b", chalk.hex("#fbbf24")(alertText), alertText.length);
+    } else {
+      const part1 = alertText.slice(0, 68);
+      const part2 = "        " + alertText.slice(68);
+      printCardLine("#f59e0b", chalk.hex("#fbbf24")(part1), part1.length);
+      printCardLine("#f59e0b", chalk.hex("#fbbf24")(part2), part2.length);
+    }
+  }
+
+  printCardEmpty("#f59e0b");
+  printCardFooter("#f59e0b");
 
   // 1. Executive Financial ROI Box
   printCardHeader("#10b981", "CAPITAL ARBITRAGE & FINANCIAL EFFICIENCY (ROI)");

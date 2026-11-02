@@ -44,6 +44,7 @@ USAGE:
 OPTIONS:
   -i, --interactive     Run guided interactive setup wizard (default in interactive terminal)
   -y, --yes             Run non-interactive setup with recommended defaults
+  --telemetry, --stats  Display top-down F1 Pit Wall executive efficiency scorecard & savings
   --skills-only         Synchronize bundled Matt Pocock & custom skills only
   --extensions-only     Deploy Pi harness extensions only
   --config-only         Write NVIDIA SoL-Pi & Pi settings.json only
@@ -64,6 +65,7 @@ PROVIDER DOCUMENTATION:
 EXAMPLES:
   ./setup.sh            # Guided interactive wizard
   ./setup.sh --yes      # Automated silent install (recommended for CI / Docker)
+  ./setup.sh --telemetry# Executive F1 Pit Wall telemetry & savings scorecard
   ./setup.sh --ollama   # Configure Ollama & bake 32K local workhorse
   ./setup.sh --check    # Check current system readiness
 
@@ -80,6 +82,7 @@ EXTENSIONS_ONLY=false
 CONFIG_ONLY=false
 OLLAMA_ONLY=false
 CHECK_ONLY=false
+TELEMETRY_ONLY=false
 UNINSTALL=false
 
 # If run directly with no arguments in an interactive terminal, default to interactive wizard
@@ -98,6 +101,9 @@ for arg in "$@"; do
     -y|--yes|--non-interactive)
       NON_INTERACTIVE=true
       INTERACTIVE=false
+      ;;
+    --telemetry|--stats)
+      TELEMETRY_ONLY=true
       ;;
     --skills|--skills-only)
       SKILLS_ONLY=true
@@ -124,6 +130,20 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+if [ "$TELEMETRY_ONLY" = true ]; then
+  if [ -x "${SCRIPT_DIR}/node_modules/.bin/tsx" ] && [ -f "${SCRIPT_DIR}/bin/kobayashi.ts" ]; then
+    "${SCRIPT_DIR}/node_modules/.bin/tsx" "${SCRIPT_DIR}/bin/kobayashi.ts" stats
+  elif [ -f "${SCRIPT_DIR}/bin/kobayashi.ts" ]; then
+    npx --yes tsx "${SCRIPT_DIR}/bin/kobayashi.ts" stats
+  elif command -v kobayashi &> /dev/null; then
+    kobayashi stats
+  else
+    echo -e "${RED}[ERROR] Kobayashi CLI not found. Run ./setup.sh first.${RESET}"
+    exit 1
+  fi
+  exit 0
+fi
 
 # Remote execution handler (e.g. curl -fsSL ... | bash)
 if [ ! -f "${SCRIPT_DIR}/skill-rag.ts" ] && [ ! -f "${SCRIPT_DIR}/sota-harness/skill-rag.ts" ]; then
@@ -519,6 +539,18 @@ if [ "$CONFIG_ONLY" = false ]; then
   deploy_extension "bottom-up-router.ts"
   deploy_extension "repo-mapper.ts"
   deploy_extension "git-checkpoint.ts"
+
+  # Deploy executive telemetry dashboard
+  dash_src=""
+  if [ -f "${SCRIPT_DIR}/src/dashboard/exec-dashboard.mjs" ]; then
+    dash_src="${SCRIPT_DIR}/src/dashboard/exec-dashboard.mjs"
+  elif [ -f "${SCRIPT_DIR}/sota-harness/exec-dashboard.mjs" ]; then
+    dash_src="${SCRIPT_DIR}/sota-harness/exec-dashboard.mjs"
+  fi
+  if [ -n "$dash_src" ]; then
+    cp -f "${dash_src}" "${PI_AGENT_DIR}/exec-dashboard.mjs"
+    echo -e "  ✔ Deployed: ${GREEN}exec-dashboard.mjs${RESET} -> ~/.pi/agent/"
+  fi
 fi
 
 if [ "$EXTENSIONS_ONLY" = true ]; then

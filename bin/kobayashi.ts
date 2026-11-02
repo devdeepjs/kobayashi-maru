@@ -54,6 +54,7 @@ program
 
 program
   .command("stats")
+  .alias("telemetry")
   .description("Display cumulative telemetry audit, token usage by tier, and capital saved")
   .option("-w, --web", "Launch live browser analytics dashboard")
   .option("-j, --json", "Output telemetry in raw JSON format")
