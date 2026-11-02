@@ -9,6 +9,7 @@ import { advisorCommand } from "../src/cli/commands/advisor.js";
 import { configCommand } from "../src/cli/commands/config.js";
 import { statsCommand } from "../src/cli/commands/stats.js";
 import { evalCommand } from "../src/cli/commands/eval.js";
+import { mcpCommand } from "../src/cli/commands/mcp.js";
 
 const program = new Command();
 
@@ -69,9 +70,16 @@ program
 
 program
   .command("skills")
-  .description("Audit installed skills and test dynamic progressive activation")
+  .description("Audit installed skills, import custom skills, and test BM25 progressive activation")
+  .option("-a, --add <source>", "Import custom skills from Git repository or local folder into ~/.agents/skills/")
   .option("-t, --test-prompt <prompt>", "Test dynamic skill activation for a given prompt")
   .action(skillsCommand);
+
+program
+  .command("mcp")
+  .description("Import and configure MCP servers from Claude Desktop or Cursor into Pi")
+  .option("-i, --import [source]", "Import MCP servers from Claude Desktop, Cursor, or custom path")
+  .action((options) => mcpCommand({ importSource: typeof options.import === "string" ? options.import : undefined }));
 
 program
   .command("advisor <question>")

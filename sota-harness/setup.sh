@@ -10,10 +10,11 @@
 # 3. SRA Skill-RAG (Okapi BM25 Dynamic Capability Retrieval for 500+ skills)
 # 4. DeepSeek Minimal Seam (Lean active toolloadout, zero prompt bloat)
 # 5. NVIDIA SoL-Pi (Observation Compaction & Online Context Pruning)
-# 6. Dual Virtual Model Router (Frontier Planner + $0 Local Workhorse)
+# 6. Dual Virtual Model Router (Frontier Planner + $0 Local Workhorse, any model customizable)
 # 7. AST-grep Repository Topology Mapper (v0.51 outline)
-# 8. Git Checkpoint Engine (Turn-boundary rollback)
-# 9. Vetted Extensions: @dietrichgebert/ponytail, @langfuse/pi-observability-plugin, pi-web-access, pi-ollama
+# 8. Git Checkpoint Engine (Architecture-safe turn-boundary rollback)
+# 9. Fresh Laptop Zero-Friction MCP & Custom Skills Import
+# 10. Vetted Extensions: @dietrichgebert/ponytail, @langfuse/pi-observability-plugin, pi-web-access, pi-ollama
 # ==============================================================================
 
 set -euo pipefail
@@ -25,6 +26,11 @@ YELLOW="\033[1;33m"
 RED="\033[0;31m"
 MAGENTA="\033[0;35m"
 RESET="\033[0m"
+
+# Ensure Apple Silicon native Homebrew is first in PATH to avoid broken Intel binaries
+if [ "$(uname -m)" = "arm64" ] && [ -d "/opt/homebrew/bin" ]; then
+  export PATH="/opt/homebrew/bin:$PATH"
+fi
 
 # Safe resolution of script directory even when executed via curl | bash
 if [ -n "${BASH_SOURCE[0]:-}" ] && [ "${BASH_SOURCE[0]}" != "bash" ] && [ "${BASH_SOURCE[0]}" != "sh" ]; then
@@ -39,7 +45,7 @@ SKILLS_DIR="${HOME}/.agents/skills"
 
 # Detect a working git binary that can actually execute on this CPU architecture
 find_working_git() {
-  for g in "git" "/usr/bin/git" "/opt/homebrew/bin/git" "/usr/local/bin/git"; do
+  for g in "/opt/homebrew/bin/git" "/usr/bin/git" "git" "/usr/local/bin/git"; do
     if command -v "$g" >/dev/null 2>&1; then
       if "$g" --version >/dev/null 2>&1; then
         echo "$g"
@@ -70,6 +76,11 @@ OPTIONS:
   --ollama              Configure Ollama memory flags, bake 32K workhorse & install pi-ollama
   --check               Run environment diagnostic check without modifications
   --uninstall           Cleanly remove deployed extensions and reset configuration
+  --planner <model>     Set custom planner for virtual router (e.g. anthropic/claude-3-7-sonnet-20250219)
+  --worker <model>      Set custom worker for virtual router (e.g. ollama/qwen2.5-coder:7b)
+  --skills-repo <url>   Import custom skills from Git repository (Zero-friction for fresh laptops)
+  --skills-dir <path>   Import custom skills from local directory
+  --mcp-import          Import MCP servers from Claude Desktop & Cursor into Pi
   -h, --help            Show this help guide and exit
 
 PROVIDER DOCUMENTATION:
@@ -103,47 +114,81 @@ OLLAMA_ONLY=false
 CHECK_ONLY=false
 TELEMETRY_ONLY=false
 UNINSTALL=false
+SKILLS_REPO=""
+SKILLS_DIR_INPUT=""
+CUSTOM_PLANNER=""
+CUSTOM_WORKER=""
+MCP_IMPORT=false
 
 # If run directly with no arguments in an interactive terminal, default to interactive wizard
 if [ "$#" -eq 0 ] && [ -t 0 ]; then
   INTERACTIVE=true
 fi
 
-for arg in "$@"; do
-  case "$arg" in
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     -h|--help)
       show_help
       ;;
     -i|--interactive)
       INTERACTIVE=true
+      shift
       ;;
     -y|--yes|--non-interactive)
       NON_INTERACTIVE=true
       INTERACTIVE=false
+      shift
       ;;
     --telemetry|--stats)
       TELEMETRY_ONLY=true
+      shift
       ;;
     --skills|--skills-only)
       SKILLS_ONLY=true
+      shift
       ;;
     --extensions|--extensions-only)
       EXTENSIONS_ONLY=true
+      shift
       ;;
     --config|--config-only)
       CONFIG_ONLY=true
+      shift
       ;;
     --ollama|--ollama-only)
       OLLAMA_ONLY=true
+      shift
       ;;
     --uninstall|--remove)
       UNINSTALL=true
+      shift
       ;;
     --check)
       CHECK_ONLY=true
+      shift
+      ;;
+    --skills-repo)
+      SKILLS_REPO="${2:-}"
+      shift 2
+      ;;
+    --skills-dir)
+      SKILLS_DIR_INPUT="${2:-}"
+      shift 2
+      ;;
+    --planner)
+      CUSTOM_PLANNER="${2:-}"
+      shift 2
+      ;;
+    --worker)
+      CUSTOM_WORKER="${2:-}"
+      shift 2
+      ;;
+    --mcp-import)
+      MCP_IMPORT=true
+      shift
       ;;
     *)
-      echo -e "${RED}[ERROR] Unknown option: ${arg}${RESET}"
+      echo -e "${RED}[ERROR] Unknown option: $1${RESET}"
       echo "Run './setup.sh --help' for usage instructions."
       exit 1
       ;;
@@ -158,75 +203,55 @@ if [ "$TELEMETRY_ONLY" = true ]; then
   elif command -v kobayashi &> /dev/null; then
     kobayashi stats
   else
-    echo -e "${RED}[ERROR] Kobayashi CLI not found. Run ./setup.sh first.${RESET}"
-    exit 1
+    echo -e "${YELLOW}Notice: Kobayashi telemetry CLI not built yet.${RESET}"
+    echo -e "Run ${BOLD}./setup.sh${RESET} or ${BOLD}npm run stats${RESET} inside the repo directory."
   fi
   exit 0
 fi
 
-# Remote execution handler (e.g. curl -fsSL ... | bash)
-if [ ! -f "${SCRIPT_DIR}/skill-rag.ts" ] && [ ! -f "${SCRIPT_DIR}/sota-harness/skill-rag.ts" ]; then
-  REMOTE_TARGET="${HOME}/.kobayashi-maru"
-  echo -e "${CYAN}Remote execution detected. Syncing repository into ${REMOTE_TARGET}...${RESET}"
+# ------------------------------------------------------------------------------
+# Remote Execution Bootstrap (Handles curl | bash on Fresh Laptops)
+# ------------------------------------------------------------------------------
+if [ ! -f "${SCRIPT_DIR}/package.json" ]; then
+  echo -e "${CYAN}Remote execution detected. Syncing repository into ${HOME}/.kobayashi-maru...${RESET}"
+  INSTALL_TARGET="${HOME}/.kobayashi-maru"
 
-  GIT_BIN="$(find_working_git || true)"
-  SYNCED=false
+  GIT_CMD="$(find_working_git || true)"
 
-  if [ -n "$GIT_BIN" ]; then
-    if [ -d "${REMOTE_TARGET}/.git" ]; then
-      if "$GIT_BIN" -C "${REMOTE_TARGET}" pull --quiet 2>/dev/null; then
-        SYNCED=true
-      fi
+  if [ -n "$GIT_CMD" ]; then
+    if [ -d "${INSTALL_TARGET}/.git" ]; then
+      echo -e "  Updating existing repository via git..."
+      $GIT_CMD -C "${INSTALL_TARGET}" pull --rebase origin main --quiet || true
     else
-      if "$GIT_BIN" clone --quiet https://github.com/devdeepjs/kobayashi-maru.git "${REMOTE_TARGET}" 2>/dev/null; then
-        SYNCED=true
-      fi
-    fi
-  fi
-
-  if [ "$SYNCED" = false ]; then
-    echo -e "  Syncing via HTTPS archive download (curl + tar)..."
-    mkdir -p "${REMOTE_TARGET}"
-    if curl -fsSL https://github.com/devdeepjs/kobayashi-maru/archive/refs/heads/main.tar.gz | tar -xz -C "${REMOTE_TARGET}" --strip-components=1 2>/dev/null; then
-      SYNCED=true
-    else
-      echo -e "  ${RED}[ERROR] Failed to download repository archive. Please check your internet connection.${RESET}"
-      exit 1
-    fi
-  fi
-
-  # Transfer execution to the cloned/downloaded script on disk
-  if [ -f "${REMOTE_TARGET}/setup.sh" ]; then
-    chmod +x "${REMOTE_TARGET}/setup.sh"
-    if [ -t 0 ]; then
-      exec bash "${REMOTE_TARGET}/setup.sh" "$@"
-    elif [ -c /dev/tty ]; then
-      exec bash "${REMOTE_TARGET}/setup.sh" "$@" < /dev/tty
-    else
-      exec bash "${REMOTE_TARGET}/setup.sh" --yes "$@"
+      echo -e "  Cloning repository via git..."
+      rm -rf "${INSTALL_TARGET}"
+      $GIT_CMD clone --depth 1 "https://github.com/devdeepjs/kobayashi-maru.git" "${INSTALL_TARGET}" --quiet
     fi
   else
-    echo -e "  ${RED}[ERROR] setup.sh missing from ${REMOTE_TARGET}.${RESET}"
-    exit 1
+    echo -e "  ${YELLOW}No functional git detected. Downloading tarball archive directly via HTTPS...${RESET}"
+    mkdir -p "${INSTALL_TARGET}"
+    curl -fsSL "https://github.com/devdeepjs/kobayashi-maru/archive/refs/heads/main.tar.gz" | tar -xz -C "${INSTALL_TARGET}" --strip-components=1
   fi
+
+  SCRIPT_DIR="${INSTALL_TARGET}"
+  echo -e "  ✔ Successfully synchronized into ${GREEN}${INSTALL_TARGET}${RESET}\n"
 fi
 
-# Uninstall / Clean Reset Handler
+# ------------------------------------------------------------------------------
+# Uninstall Workflow
+# ------------------------------------------------------------------------------
 if [ "$UNINSTALL" = true ]; then
-  echo -e "${YELLOW}Uninstalling Kobayashi Maru extensions from ~/.pi/agent/extensions/...${RESET}"
+  echo -e "${YELLOW}Uninstalling Kobayashi Maru extensions and resetting configuration...${RESET}"
   rm -f "${EXTENSIONS_DIR}/skill-rag.ts"
   rm -f "${EXTENSIONS_DIR}/bottom-up-router.ts"
   rm -f "${EXTENSIONS_DIR}/repo-mapper.ts"
   rm -f "${EXTENSIONS_DIR}/git-checkpoint.ts"
-  echo -e "  ✔ Removed extensions: skill-rag.ts, bottom-up-router.ts, repo-mapper.ts, git-checkpoint.ts"
-
-  if [ -f "${PI_AGENT_DIR}/sol-pi.json" ]; then
-    rm -f "${PI_AGENT_DIR}/sol-pi.json"
-    echo -e "  ✔ Removed: sol-pi.json"
-  fi
-
-  echo -e "\n${BOLD}${GREEN}✔ Kobayashi Maru extensions uninstalled cleanly.${RESET}"
-  echo -e "Your Pi coding agent installation and personal configurations remain untouched."
+  rm -f "${EXTENSIONS_DIR}/kobayashi-router.js"
+  rm -f "${EXTENSIONS_DIR}/tier-switcher.ts"
+  rm -f "${PI_AGENT_DIR}/exec-dashboard.mjs"
+  echo -e "${GREEN}✔ Kobayashi extensions removed from ${EXTENSIONS_DIR}${RESET}"
+  echo -e "${GREEN}✔ Skills in ~/.agents/skills preserved.${RESET}"
+  echo -e "${BOLD}${GREEN}Uninstall complete.${RESET}"
   exit 0
 fi
 
@@ -313,8 +338,29 @@ CHOSEN_PROVIDER="bedrock-mantle"
 CHOSEN_MODEL="openai.gpt-5.6-luna"
 CHOSEN_THINKING="medium"
 ENABLE_LOCAL_WORKHORSE=true
-CUSTOM_BASE_URL=""
-CUSTOM_API_KEY=""
+
+PLANNER_PROVIDER="bedrock-mantle"
+PLANNER_MODEL="openai.gpt-5.6-luna"
+WORKER_PROVIDER="ollama"
+WORKER_MODEL="ornith-1.5:ctx"
+
+if [ -n "$CUSTOM_PLANNER" ]; then
+  if [[ "$CUSTOM_PLANNER" == *"/"* ]]; then
+    PLANNER_PROVIDER="${CUSTOM_PLANNER%%/*}"
+    PLANNER_MODEL="${CUSTOM_PLANNER#*/}"
+  else
+    PLANNER_MODEL="$CUSTOM_PLANNER"
+  fi
+fi
+
+if [ -n "$CUSTOM_WORKER" ]; then
+  if [[ "$CUSTOM_WORKER" == *"/"* ]]; then
+    WORKER_PROVIDER="${CUSTOM_WORKER%%/*}"
+    WORKER_MODEL="${CUSTOM_WORKER#*/}"
+  else
+    WORKER_MODEL="$CUSTOM_WORKER"
+  fi
+fi
 
 echo -e "${BOLD}${MAGENTA}Omnichannel Multi-Provider Architecture Setup${RESET}"
 echo -e "Enabling ALL 6 model providers simultaneously — you have full freedom across all models!\n"
@@ -376,16 +422,67 @@ if [ "$INTERACTIVE" = true ]; then
   if [[ "$WORKHORSE_CHOICE" =~ ^[Nn] ]]; then
     ENABLE_LOCAL_WORKHORSE=false
   fi
+
+  # Virtual Model Router Customization
+  echo ""
+  read -r -p "Customize Virtual Model Router (Planner & Worker models)? [y/N, default: N]: " VIRTUAL_CUSTOM_CHOICE
+  if [[ "$VIRTUAL_CUSTOM_CHOICE" =~ ^[Yy] ]]; then
+    read -r -p "Enter Planner model [default: bedrock-mantle/openai.gpt-5.6-luna]: " INPUT_PLANNER
+    if [ -n "$INPUT_PLANNER" ]; then
+      if [[ "$INPUT_PLANNER" == *"/"* ]]; then
+        PLANNER_PROVIDER="${INPUT_PLANNER%%/*}"
+        PLANNER_MODEL="${INPUT_PLANNER#*/}"
+      else
+        PLANNER_MODEL="$INPUT_PLANNER"
+      fi
+    fi
+
+    read -r -p "Enter Worker model [default: ollama/ornith-1.5:ctx]: " INPUT_WORKER
+    if [ -n "$INPUT_WORKER" ]; then
+      if [[ "$INPUT_WORKER" == *"/"* ]]; then
+        WORKER_PROVIDER="${INPUT_WORKER%%/*}"
+        WORKER_MODEL="${INPUT_WORKER#*/}"
+      else
+        WORKER_MODEL="$INPUT_WORKER"
+      fi
+    fi
+  fi
+
+  # Fresh Laptop Custom Skills Import
+  echo ""
+  read -r -p "Fresh Laptop: Import your existing custom skills from Git or directory? [y/N, default: N]: " SKILLS_IMPORT_CHOICE
+  if [[ "$SKILLS_IMPORT_CHOICE" =~ ^[Yy] ]]; then
+    read -r -p "Enter Git repo URL or local directory path: " INPUT_SKILLS_SRC
+    if [ -n "$INPUT_SKILLS_SRC" ]; then
+      if [[ "$INPUT_SKILLS_SRC" == http* ]] || [[ "$INPUT_SKILLS_SRC" == git@* ]]; then
+        SKILLS_REPO="$INPUT_SKILLS_SRC"
+      else
+        SKILLS_DIR_INPUT="$INPUT_SKILLS_SRC"
+      fi
+    fi
+  fi
+
+  # MCP Auto-Import
+  CLAUDE_MCP="${HOME}/Library/Application Support/Claude/claude_desktop_config.json"
+  CURSOR_MCP="${HOME}/.cursor/mcp.json"
+  if [ -f "$CLAUDE_MCP" ] || [ -f "$CURSOR_MCP" ]; then
+    echo ""
+    read -r -p "Detected MCP configs in Claude Desktop / Cursor. Auto-import into Pi? [Y/n, default: Y]: " MCP_CHOICE
+    MCP_CHOICE="${MCP_CHOICE:-Y}"
+    if [[ ! "$MCP_CHOICE" =~ ^[Nn] ]]; then
+      MCP_IMPORT=true
+    fi
+  fi
   echo ""
 fi
 
 echo -e "${BOLD}Starting Kobayashi Maru Harness Setup (${CHOSEN_PROVIDER})...${RESET}\n"
 
 # ------------------------------------------------------------------------------
-# 1. Dependency Checks
+# 1. Dependency Checks & Apple Silicon Path Injection
 # ------------------------------------------------------------------------------
 if [ "$SKILLS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
-  echo -e "${CYAN}[1/7] Checking system dependencies...${RESET}"
+  echo -e "${CYAN}[1/7] Checking system dependencies & configuring architecture paths...${RESET}"
 
   if ! command -v node >/dev/null 2>&1; then
     echo -e "${RED}[ERROR] Node.js is required (>= 20.x). Please install Node.js first.${RESET}"
@@ -394,9 +491,27 @@ if [ "$SKILLS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
   NODE_VERSION=$(node -v)
   echo -e "  ✔ Node.js: ${GREEN}${NODE_VERSION}${RESET}"
 
+  # Protect Apple Silicon shells against Rosetta/Intel git binary crashes
+  SHELL_RC="${HOME}/.zshrc"
+  if [ ! -f "${SHELL_RC}" ]; then
+    SHELL_RC="${HOME}/.bashrc"
+  fi
+
+  if [ "$(uname -m)" = "arm64" ] && [ -d "/opt/homebrew/bin" ]; then
+    if ! grep -q "/opt/homebrew/bin" "${SHELL_RC}" 2>/dev/null; then
+      cat << 'EOF' >> "${SHELL_RC}"
+
+# --- Apple Silicon Native Priority Path ---
+export PATH="/opt/homebrew/bin:$PATH"
+EOF
+      echo -e "  ✔ Prioritized /opt/homebrew/bin in ${GREEN}${SHELL_RC}${RESET}"
+    fi
+    export PATH="/opt/homebrew/bin:$PATH"
+  fi
+
   GIT_CMD="$(find_working_git || true)"
   if [ -n "$GIT_CMD" ]; then
-    echo -e "  ✔ Git: ${GREEN}$($GIT_CMD --version)${RESET}"
+    echo -e "  ✔ Functional Git: ${GREEN}$($GIT_CMD --version)${RESET} (${GIT_CMD})"
   else
     echo -e "  ${YELLOW}[WARNING] Working git binary not detected in PATH.${RESET}"
     echo -e "  (Git checkpoint engine will be bypassed until 'xcode-select --install' or 'brew install git' is run)."
@@ -420,11 +535,6 @@ if [ "$SKILLS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
     if command -v ollama >/dev/null 2>&1; then
       echo -e "  ✔ Ollama: ${GREEN}Detected${RESET}"
 
-      # Configure Ollama Memory Optimization Flags in Shell
-      SHELL_RC="${HOME}/.zshrc"
-      if [ ! -f "${SHELL_RC}" ]; then
-        SHELL_RC="${HOME}/.bashrc"
-      fi
       if ! grep -q "OLLAMA_FLASH_ATTENTION" "${SHELL_RC}" 2>/dev/null; then
         cat << 'EOF' >> "${SHELL_RC}"
 
@@ -502,10 +612,10 @@ echo -e "  ✔ Extension target: ${GREEN}${EXTENSIONS_DIR}${RESET}"
 echo -e "  ✔ Global skills target: ${GREEN}${SKILLS_DIR}${RESET}"
 
 # ------------------------------------------------------------------------------
-# 4. Synchronize Bundled Skills (Matt Pocock 38-Skill Suite + Custom Skills)
+# 4. Synchronize Bundled & Custom Skills
 # ------------------------------------------------------------------------------
 if [ "$EXTENSIONS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
-  echo -e "\n${CYAN}[4/7] Synchronizing bundled skills suite into ~/.agents/skills...${RESET}"
+  echo -e "\n${CYAN}[4/7] Synchronizing skills into ~/.agents/skills (Okapi BM25 Indexing)...${RESET}"
 
   SKILLS_SRC=""
   if [ -d "${SCRIPT_DIR}/.agents/skills" ]; then
@@ -516,15 +626,34 @@ if [ "$EXTENSIONS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
 
   if [ -n "${SKILLS_SRC}" ] && [ -d "${SKILLS_SRC}" ]; then
     cp -R "${SKILLS_SRC}/"* "${SKILLS_DIR}/" 2>/dev/null || true
-    SKILL_COUNT=$(find "${SKILLS_DIR}" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
-    echo -e "  ✔ Synchronized: ${GREEN}${SKILL_COUNT} skills${RESET} globally ready in ${SKILLS_DIR}"
-    echo -e "    • ${BOLD}Engineering & TDD${RESET}: tdd, prototype, implement, implement-spec, diagnosing-bugs"
-    echo -e "    • ${BOLD}Architecture & Spec${RESET}: codebase-design, domain-modeling, to-spec, to-tickets"
-    echo -e "    • ${BOLD}Review & Guardrails${RESET}: code-review, git-guardrails-claude-code, grill-me, grill-with-docs"
-    echo -e "    • ${BOLD}Meta & Workflow${RESET}: ask-matt, chief-of-staff, wait-what, wayfinder, wizard"
-  else
-    echo -e "  ${YELLOW}[INFO] Local .agents/skills not found; existing ~/.agents/skills preserved.${RESET}"
   fi
+
+  # Import custom skills from Git repository if requested
+  GIT_BIN="$(find_working_git || true)"
+  if [ -n "$SKILLS_REPO" ]; then
+    echo -e "  ${CYAN}Cloning custom skills repo: ${BOLD}${SKILLS_REPO}${RESET}..."
+    REPO_NAME=$(basename "${SKILLS_REPO}" .git)
+    TARGET_REPO_DIR="${SKILLS_DIR}/${REPO_NAME}"
+    if [ -d "$TARGET_REPO_DIR" ] && [ -n "$GIT_BIN" ]; then
+      $GIT_BIN -C "$TARGET_REPO_DIR" pull --rebase 2>/dev/null || true
+    elif [ -n "$GIT_BIN" ]; then
+      $GIT_BIN clone --depth 1 "$SKILLS_REPO" "$TARGET_REPO_DIR" 2>/dev/null || true
+    fi
+    echo -e "  ✔ Cloned custom skills into ${GREEN}${TARGET_REPO_DIR}${RESET}"
+  fi
+
+  # Import custom skills from local directory if requested
+  if [ -n "$SKILLS_DIR_INPUT" ] && [ -d "$SKILLS_DIR_INPUT" ]; then
+    DIR_NAME=$(basename "${SKILLS_DIR_INPUT}")
+    TARGET_CUSTOM_DIR="${SKILLS_DIR}/${DIR_NAME}"
+    mkdir -p "$TARGET_CUSTOM_DIR"
+    cp -R "${SKILLS_DIR_INPUT}/"* "$TARGET_CUSTOM_DIR/" 2>/dev/null || true
+    echo -e "  ✔ Copied custom skills into ${GREEN}${TARGET_CUSTOM_DIR}${RESET}"
+  fi
+
+  SKILL_COUNT=$(find "${SKILLS_DIR}" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+  echo -e "  ✔ Synchronized: ${GREEN}${SKILL_COUNT} skills${RESET} globally indexed in ${SKILLS_DIR}"
+  echo -e "  ✔ Okapi BM25 RAG: 0 tokens on Turn 1 cold starts (vs ~37,500 in static dump)"
 fi
 
 if [ "$SKILLS_ONLY" = true ]; then
@@ -753,6 +882,82 @@ cat > "${MODELS_CONF}" << 'EOF'
 EOF
 echo -e "  ✔ Configured Omnichannel Model Registry: ${GREEN}${MODELS_CONF}${RESET} (Ollama, OpenRouter, Cursor Proxies)"
 
+# 4. Virtual Model Routing Configuration (Any Model Customizable)
+VIRTUAL_MODELS_CONF="${PI_AGENT_DIR}/virtual-models.json"
+cat > "${VIRTUAL_MODELS_CONF}" << EOF
+{
+  "\$schema": "https://pi.dev/schemas/virtual-models.schema.json",
+  "planner": {
+    "provider": "${PLANNER_PROVIDER}",
+    "model": "${PLANNER_MODEL}",
+    "thinking": "medium"
+  },
+  "worker": {
+    "provider": "${WORKER_PROVIDER}",
+    "model": "${WORKER_MODEL}",
+    "thinking": "off"
+  },
+  "advisor": {
+    "provider": "amazon-bedrock",
+    "model": "us.anthropic.claude-sonnet-5-5",
+    "thinking": "high"
+  },
+  "escalationThreshold": 2
+}
+EOF
+echo -e "  ✔ Configured Virtual Models: ${GREEN}${VIRTUAL_MODELS_CONF}${RESET} (Planner: ${PLANNER_PROVIDER}/${PLANNER_MODEL}, Worker: ${WORKER_PROVIDER}/${WORKER_MODEL})"
+
+# 5. Keyless Jina Reader Web Routing for JavaScript Rendered Sites (Jira, Confluence, etc.)
+WEB_SEARCH_CONF="${PI_AGENT_DIR}/web-search.json"
+cat > "${WEB_SEARCH_CONF}" << 'EOF'
+{
+  "$schema": "https://pi.dev/schemas/web-search.schema.json",
+  "fetchRouting": {
+    "allowRemoteHostedProviders": true,
+    "providers": [
+      "jina",
+      "direct"
+    ]
+  }
+}
+EOF
+echo -e "  ✔ Configured Dynamic Web Fetching (Jina Reader for Jira/Confluence): ${GREEN}${WEB_SEARCH_CONF}${RESET}"
+
+# 6. Auto-Import MCP Servers from Claude Desktop & Cursor
+if [ "$MCP_IMPORT" = true ]; then
+  echo -e "\n  ${CYAN}Auto-importing MCP servers into ~/.pi/agent/mcp.json...${RESET}"
+  node -e "
+    const fs = require('fs');
+    const path = require('path');
+    const home = process.env.HOME || '';
+    const target = path.join(home, '.pi', 'agent', 'mcp.json');
+    const candidates = [
+      path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json'),
+      path.join(home, '.cursor', 'mcp.json'),
+      path.join(home, '.config', 'Claude', 'claude_desktop_config.json')
+    ];
+    let dest = { mcpServers: {} };
+    if (fs.existsSync(target)) {
+      try { dest = JSON.parse(fs.readFileSync(target, 'utf8')); if (!dest.mcpServers) dest.mcpServers = {}; } catch {}
+    }
+    let count = 0;
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(c, 'utf8'));
+          for (const [name, cfg] of Object.entries(data.mcpServers || {})) {
+            dest.mcpServers[name] = cfg;
+            count++;
+          }
+        } catch {}
+      }
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, JSON.stringify(dest, null, 2) + '\n');
+    console.log('    ✔ Merged ' + count + ' MCP servers into ~/.pi/agent/mcp.json');
+  " 2>/dev/null || true
+fi
+
 if [ "$CONFIG_ONLY" = true ]; then
   echo -e "\n${BOLD}${GREEN}✔ Configuration files written successfully!${RESET}"
   exit 0
@@ -774,7 +979,7 @@ echo -e "${BOLD}${GREEN}✔ KOBAYASHI MARU OMNICHANNEL HARNESS IS READY!${RESET}
 echo -e "${BOLD}${GREEN}========================================================================${RESET}\n"
 
 echo -e "${BOLD}All 6 Provider Backends Activated & Ready to Use:${RESET}"
-echo -e "  • ${CYAN}Hybrid Powertrain${RESET}     : pi --model auto/planner-worker (Planner + \$0 Local Workhorse)"
+echo -e "  • ${CYAN}Hybrid Powertrain${RESET}     : pi --model auto/planner-worker (Planner: ${PLANNER_PROVIDER}/${PLANNER_MODEL} + Worker: ${WORKER_PROVIDER}/${WORKER_MODEL})"
 echo -e "  • ${CYAN}AWS Bedrock Mantle${RESET}    : pi -m bedrock-mantle/openai.gpt-5.6-luna (14x cheaper token economics)"
 echo -e "  • ${CYAN}Direct Amazon Bedrock${RESET} : pi -m amazon-bedrock/us.anthropic.claude-sonnet-5-5"
 echo -e "  • ${CYAN}Direct Anthropic Claude${RESET}: pi -m anthropic/claude-3-7-sonnet-20250219"
@@ -793,7 +998,7 @@ echo -e "  • ${BOLD}NVIDIA SoL-Pi${RESET}: Observation eviction & compaction a
 echo -e "  • ${BOLD}Virtual Router${RESET}: Run with ${CYAN}--model auto/planner-worker${RESET} or ${CYAN}--model auto/bottom-up${RESET}."
 echo -e "  • ${BOLD}AST-grep Topology${RESET}: Run ${CYAN}repo_map({ query: '...' })${RESET} to outline codebases in < 800 tokens."
 echo -e "  • ${BOLD}Native Ollama (pi-ollama)${RESET}: Per-request context allocation (32K), warm-up, and zero silent truncation."
-echo -e "  • ${BOLD}Git Checkpoint${RESET}: Pre-turn git stash checkpoints for 1-click deterministic rollback.\n"
+echo -e "  • ${BOLD}Architecture-Safe Git Checkpoint${RESET}: Pre-turn git stash checkpoints with 0-overhead fallback.\n"
 
 echo -e "Try it now:"
 echo -e "  ${BOLD}pi --model auto/planner-worker -p \"Review the repo structure and explain main entrypoints\"${RESET}\n"

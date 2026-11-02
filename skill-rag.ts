@@ -77,6 +77,32 @@ export class Bm25Ranker {
 }
 
 /**
+ * Recursively scans directory for SKILL.md files (up to maxDepth)
+ * Allows zero-friction import of git repos or nested folders of custom skills on fresh laptops.
+ */
+export function findSkillFiles(dir: string, depth = 0, maxDepth = 3): string[] {
+  if (depth > maxDepth || !fs.existsSync(dir)) return [];
+  const results: string[] = [];
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const directSkill = path.join(fullPath, "SKILL.md");
+        if (fs.existsSync(directSkill)) {
+          results.push(directSkill);
+        }
+        results.push(...findSkillFiles(fullPath, depth + 1, maxDepth));
+      } else if (entry.isFile() && entry.name === "SKILL.md") {
+        results.push(fullPath);
+      }
+    }
+  } catch {}
+  return [...new Set(results)];
+}
+
+/**
  * F1 SRA Engine (Skill Retrieval Augmentation & DeepSeek Minimal Seam)
  * 
  * 1. Supports 500+ skills in memory via BM25 (< 2ms index latency).
@@ -84,7 +110,8 @@ export class Bm25Ranker {
  *    - Injects 0 skills on greetings or generic tasks (saving 3,000 to 35,000 tokens).
  *    - Injects ONLY the top 1-2 matched skills when a task specifically calls for them.
  *    - Implements Dynamic Tool Seam: keeps passive meta/web tools out of prompt unless requested.
- * 3. Registers `find_skill` so the agent can discover and retrieve ANY skill mid-turn on demand.
+ * 3. Registers `find_skill` (with both execute & handler for Pi 1.4+ compatibility)
+ *    so the agent can discover and retrieve ANY skill mid-turn on demand.
  */
 export default function (pi: ExtensionAPI) {
   let allSkills: any[] = [];
@@ -101,7 +128,7 @@ export default function (pi: ExtensionAPI) {
     }));
   }
 
-  // Pre-load from user ~/.agents/skills and package directories
+  // Pre-load from user ~/.agents/skills, package directories, and custom imports
   try {
     const candidateDirs = [
       path.join(process.env.HOME || "", ".agents", "skills"),
@@ -110,17 +137,30 @@ export default function (pi: ExtensionAPI) {
       path.join(process.env.HOME || "", ".pi", "agent", "npm", "node_modules", "@dietrichgebert", "ponytail", "skills"),
     ];
 
+    // Check virtual-models.json for user-configured skill directories
+    try {
+      const vConfigPath = path.join(process.env.HOME || "", ".pi", "agent", "virtual-models.json");
+      if (fs.existsSync(vConfigPath)) {
+        const vConfig = JSON.parse(fs.readFileSync(vConfigPath, "utf8"));
+        if (Array.isArray(vConfig.skillDirs)) {
+          for (const d of vConfig.skillDirs) {
+            if (typeof d === "string" && fs.existsSync(d)) candidateDirs.push(d);
+          }
+        }
+      }
+    } catch {}
+
     for (const baseDir of candidateDirs) {
       if (fs.existsSync(baseDir)) {
-        const entries = fs.readdirSync(baseDir);
-        for (const entry of entries) {
-          const skillPath = path.join(baseDir, entry, "SKILL.md");
-          if (fs.existsSync(skillPath)) {
+        const skillFiles = findSkillFiles(baseDir, 0, 3);
+        for (const skillPath of skillFiles) {
+          try {
             const content = fs.readFileSync(skillPath, "utf8");
             const descMatch = content.match(/description:\s*([^\n]+)/);
             const desc = descMatch ? descMatch[1].trim() : "";
             const nameMatch = content.match(/name:\s*([^\n]+)/);
-            const name = nameMatch ? nameMatch[1].trim() : entry;
+            const dirName = path.basename(path.dirname(skillPath));
+            const name = nameMatch ? nameMatch[1].trim() : dirName;
             if (!skillDocs.some((d) => d.name === name)) {
               skillDocs.push({
                 name,
@@ -128,7 +168,7 @@ export default function (pi: ExtensionAPI) {
                 skill: { name, description: desc, filePath: skillPath },
               });
             }
-          }
+          } catch {}
         }
       }
     }
@@ -143,8 +183,8 @@ export default function (pi: ExtensionAPI) {
       indexSkills(rawSkills);
     }
 
-    const promptText = (event as any).prompt || "";
-    const isWebRequested = /\b(web|search|browse|fetch|url|http|https|docs|online|google)\b/i.test(promptText);
+    const promptText = (event as any).prompt || (event as any).userPrompt || "";
+    const isWebRequested = /\b(web|search|browse|fetch|url|http|https|docs|online|google|jira|atlassian)\b/i.test(promptText);
 
     // 1. DeepSeek Minimal Seam: Filter noisy tools from the active model schema
     if (event.systemPromptOptions.selectedTools) {
@@ -181,37 +221,71 @@ export default function (pi: ExtensionAPI) {
   });
 
   // Meta-tool for on-demand skill retrieval during multi-turn sessions
+  // Supports BOTH execute(callId, params, ...) and handler(params, ctx) for universal Pi compatibility
+  const findSkillExecutor = async (
+    first: any,
+    second?: any,
+    _signal?: any,
+    _onUpdate?: any,
+    _ctx?: any
+  ) => {
+    const params = (second && typeof second === "object" && "query" in second)
+      ? second
+      : (first && typeof first === "object" && "query" in first)
+      ? first
+      : { query: typeof first === "string" ? first : "" };
+
+    const query = String(params.query || "").trim();
+    if (!query) {
+      return {
+        content: [{ type: "text", text: "Please provide a search query to locate skills (e.g. 'jira ticket investigation', 'unit tests', 'refactor')." }],
+      };
+    }
+
+    const hits = ranker.rank(query, skillDocs, 4);
+    if (!hits || hits.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `No specialized skills found matching "${query}". Available skills can be listed or standard engineering tools can be used directly.`,
+          },
+        ],
+      };
+    }
+
+    const results = hits.map((h: any) => {
+      const doc = skillDocs.find((d) => d.name === h.name);
+      if (!doc || !doc.skill) return "";
+      const filePath = doc.skill.filePath;
+      let content = "";
+      try {
+        content = fs.readFileSync(filePath, "utf8");
+      } catch {}
+      return `### Skill: ${doc.name} (BM25 relevance score: ${h.score.toFixed(2)})\nPath: ${filePath}\nInstructions:\n${content}\n`;
+    });
+
+    const text = results.filter(Boolean).join("\n---\n");
+    return {
+      content: [{ type: "text", text }],
+    };
+  };
+
   pi.registerTool({
     name: "find_skill",
-    description: "Search and retrieve specialized skill runbooks from the 500+ skills library (e.g. archify, ponytail, tdd, code-review, diagnosing-bugs, etc.).",
+    label: "Search & Mount Skills from BM25 Catalog",
+    description: "Search and retrieve specialized skill runbooks from the 500+ skills library on demand (e.g. Jira, TDD, code review, git-guardrails, architecture, etc.).",
     parameters: {
       type: "object",
       properties: {
         query: {
           type: "string",
-          description: "Keywords or task description to search skills (e.g. 'draw sequence diagram', 'unit test', 'refactor', 'diagnose memory').",
+          description: "Keywords or task description to search skills (e.g. 'jira ticket investigation', 'unit test', 'refactor', 'diagram').",
         },
       },
       required: ["query"],
     },
-    handler: async (args: { query: string }, ctx: ExtensionContext) => {
-      const hits = ranker.rank(args.query, skillDocs, 3);
-      if (!hits || hits.length === 0) {
-        return `No specialized skills found matching "${args.query}". Proceed with standard tools.`;
-      }
-
-      const results = hits.map((h: any) => {
-        const doc = skillDocs.find((d) => d.name === h.name);
-        if (!doc || !doc.skill) return "";
-        const filePath = doc.skill.filePath;
-        let content = "";
-        try {
-          content = fs.readFileSync(filePath, "utf8");
-        } catch {}
-        return `### Skill: ${doc.name} (relevance score: ${h.score.toFixed(2)})\nPath: ${filePath}\nInstructions:\n${content}\n`;
-      });
-
-      return results.join("\n---\n");
-    },
+    execute: findSkillExecutor,
+    handler: findSkillExecutor,
   });
 }

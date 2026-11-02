@@ -206,6 +206,29 @@ export function writePiConfigs(compiled: CompiledPiConfigs): void {
   fs.writeFileSync(solPiPath, JSON.stringify(compiled.solPiJson, null, 2) + "\n");
   fs.writeFileSync(kobayashiConfigPath, JSON.stringify(compiled.rawConfig, null, 2) + "\n");
 
+  // Synchronize virtual-models.json for native Virtual Model Router
+  const virtualModelsPath = path.join(compiled.targetDir, "virtual-models.json");
+  const virtualModelsConfig = {
+    $schema: "https://pi.dev/schemas/virtual-models.schema.json",
+    planner: {
+      provider: compiled.rawConfig.tiers.orchestrator?.provider || "bedrock-mantle",
+      model: compiled.rawConfig.tiers.orchestrator?.model || "openai.gpt-5.6-luna",
+      thinking: compiled.rawConfig.tiers.orchestrator?.thinking || "medium",
+    },
+    worker: {
+      provider: compiled.rawConfig.tiers.workhorse?.provider || "ollama",
+      model: compiled.rawConfig.tiers.workhorse?.model || "ornith-1.5:ctx",
+      thinking: compiled.rawConfig.tiers.workhorse?.thinking || "off",
+    },
+    advisor: {
+      provider: compiled.rawConfig.tiers.advisor?.provider || "amazon-bedrock",
+      model: compiled.rawConfig.tiers.advisor?.model || "us.anthropic.claude-sonnet-5-5",
+      thinking: compiled.rawConfig.tiers.advisor?.thinking || "high",
+    },
+    escalationThreshold: compiled.rawConfig.router?.escalation_threshold || 2,
+  };
+  fs.writeFileSync(virtualModelsPath, JSON.stringify(virtualModelsConfig, null, 2) + "\n");
+
   // Synchronize keybindings.json if not present
   const keybindingsPath = path.join(compiled.targetDir, "keybindings.json");
   if (!fs.existsSync(keybindingsPath)) {

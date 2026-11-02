@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { tokenize, Bm25Ranker } from "../skill-rag.js";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { tokenize, Bm25Ranker, findSkillFiles } from "../skill-rag.js";
 
 test("tokenize: removes stop words and stems terms", () => {
   const terms = tokenize("Write a unit test for the authentication services");
@@ -50,4 +53,24 @@ test("Bm25Ranker: multiple skill matching with threshold", () => {
   assert.ok(results.length >= 1);
   const matchedNames = results.map((r) => r.name);
   assert.ok(matchedNames.includes("code-review") || matchedNames.includes("tdd"));
+});
+
+test("findSkillFiles: recursively discovers nested SKILL.md in custom repositories", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "kobayashi-skills-test-"));
+  try {
+    const subDir1 = path.join(tmpDir, "repo-a", "skills", "skill-one");
+    const subDir2 = path.join(tmpDir, "repo-b", "skill-two");
+    fs.mkdirSync(subDir1, { recursive: true });
+    fs.mkdirSync(subDir2, { recursive: true });
+
+    fs.writeFileSync(path.join(subDir1, "SKILL.md"), "---\nname: skill-one\n---\n# Skill One\n");
+    fs.writeFileSync(path.join(subDir2, "SKILL.md"), "---\nname: skill-two\n---\n# Skill Two\n");
+
+    const found = findSkillFiles(tmpDir, 0, 3);
+    assert.equal(found.length, 2);
+    assert.ok(found.some((f) => f.includes("skill-one")));
+    assert.ok(found.some((f) => f.includes("skill-two")));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
