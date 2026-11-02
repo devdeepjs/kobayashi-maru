@@ -14,13 +14,21 @@
     "build": "tsc"
   },
   "keywords": [
+    "kobayashi-maru",
     "pi",
-    "agent-harness",
+    "pi-coding-agent",
+    "coding-agent",
+    "ai-agents",
+    "autonomous-agent",
     "token-efficiency",
+    "skill-rag",
     "sol-pi",
+    "deepseek",
+    "ast-grep",
     "prompt-caching",
     "ollama",
     "bedrock",
+    "claude",
     "skills"
   ],
   "author": "dd",
