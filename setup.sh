@@ -49,6 +49,7 @@ OPTIONS:
   --config-only         Write NVIDIA SoL-Pi & Pi settings.json only
   --ollama              Configure Ollama memory flags, bake 32K workhorse & install pi-ollama
   --check               Run environment diagnostic check without modifications
+  --uninstall           Cleanly remove deployed extensions and reset configuration
   -h, --help            Show this help guide and exit
 
 PROVIDER DOCUMENTATION:
@@ -79,6 +80,7 @@ EXTENSIONS_ONLY=false
 CONFIG_ONLY=false
 OLLAMA_ONLY=false
 CHECK_ONLY=false
+UNINSTALL=false
 
 # If run directly with no arguments in an interactive terminal, default to interactive wizard
 if [ "$#" -eq 0 ] && [ -t 0 ]; then
@@ -109,6 +111,9 @@ for arg in "$@"; do
     --ollama|--ollama-only)
       OLLAMA_ONLY=true
       ;;
+    --uninstall|--remove)
+      UNINSTALL=true
+      ;;
     --check)
       CHECK_ONLY=true
       ;;
@@ -119,6 +124,37 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# Remote execution handler (e.g. curl -fsSL ... | bash)
+if [ ! -f "${SCRIPT_DIR}/skill-rag.ts" ] && [ ! -f "${SCRIPT_DIR}/sota-harness/skill-rag.ts" ]; then
+  REMOTE_TARGET="${HOME}/.kobayashi-maru"
+  echo -e "${CYAN}Remote execution detected. Syncing repository into ${REMOTE_TARGET}...${RESET}"
+  if [ -d "${REMOTE_TARGET}/.git" ]; then
+    git -C "${REMOTE_TARGET}" pull --quiet || true
+  else
+    git clone --quiet https://github.com/devdeepjs/kobayashi-maru.git "${REMOTE_TARGET}"
+  fi
+  SCRIPT_DIR="${REMOTE_TARGET}"
+fi
+
+# Uninstall / Clean Reset Handler
+if [ "$UNINSTALL" = true ]; then
+  echo -e "${YELLOW}Uninstalling Kobayashi Maru extensions from ~/.pi/agent/extensions/...${RESET}"
+  rm -f "${EXTENSIONS_DIR}/skill-rag.ts"
+  rm -f "${EXTENSIONS_DIR}/bottom-up-router.ts"
+  rm -f "${EXTENSIONS_DIR}/repo-mapper.ts"
+  rm -f "${EXTENSIONS_DIR}/git-checkpoint.ts"
+  echo -e "  ✔ Removed extensions: skill-rag.ts, bottom-up-router.ts, repo-mapper.ts, git-checkpoint.ts"
+
+  if [ -f "${PI_AGENT_DIR}/sol-pi.json" ]; then
+    rm -f "${PI_AGENT_DIR}/sol-pi.json"
+    echo -e "  ✔ Removed: sol-pi.json"
+  fi
+
+  echo -e "\n${BOLD}${GREEN}✔ Kobayashi Maru extensions uninstalled cleanly.${RESET}"
+  echo -e "Your Pi coding agent installation and personal configurations remain untouched."
+  exit 0
+fi
 
 echo -e "${BOLD}${CYAN}"
 cat << 'EOF'

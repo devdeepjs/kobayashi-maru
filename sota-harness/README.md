@@ -4,6 +4,7 @@
 > *"I don't believe in the unwinnable scenario." — James T. Kirk*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/devdeepjs/kobayashi-maru/actions/workflows/ci.yml/badge.svg)](https://github.com/devdeepjs/kobayashi-maru/actions/workflows/ci.yml)
 [![TypeScript: 5.6](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Runtime: Pi](https://img.shields.io/badge/Runtime-Pi%20v1.4.0%2B-purple.svg)](https://github.com/earendil-works/pi)
 [![Compaction: NVIDIA SoL--Pi](https://img.shields.io/badge/Compaction-NVIDIA%20SoL--Pi-76B900.svg)](https://github.com/NVlabs/SoL-Pi)
@@ -198,6 +199,10 @@ Adding custom skills to Kobayashi Maru is completely friction-free. You **never 
 Get from zero to running autonomous engineering agent in under 2 minutes:
 
 ```bash
+# Option 1: One-liner direct install
+curl -fsSL https://raw.githubusercontent.com/devdeepjs/kobayashi-maru/main/setup.sh | bash
+
+# Option 2: Clone and inspect locally
 git clone https://github.com/devdeepjs/kobayashi-maru.git
 cd kobayashi-maru
 ./setup.sh
@@ -252,6 +257,9 @@ cd kobayashi-maru
 
 # Write configuration files only
 ./setup.sh --config
+
+# Cleanly remove extensions and reset configuration
+./setup.sh --uninstall
 
 # View CLI options
 ./setup.sh --help

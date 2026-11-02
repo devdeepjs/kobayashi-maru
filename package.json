@@ -10,6 +10,7 @@
     "start": "tsx bin/kobayashi.ts start",
     "apply": "tsx bin/kobayashi.ts apply",
     "doctor": "tsx bin/kobayashi.ts doctor",
+    "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc"
   },
