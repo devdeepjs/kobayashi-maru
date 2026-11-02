@@ -8,6 +8,8 @@
   },
   "scripts": {
     "start": "tsx bin/kobayashi.ts start",
+    "setup": "bash ./setup.sh",
+    "setup:yes": "bash ./setup.sh -y",
     "apply": "tsx bin/kobayashi.ts apply",
     "doctor": "tsx bin/kobayashi.ts doctor",
     "stats": "tsx bin/kobayashi.ts stats",

@@ -738,6 +738,9 @@ pi install npm:pi-ollama >/dev/null 2>&1 || true
 echo -e "  Installing pi-bedrock-mantle (AWS Bedrock Mantle Provider)..."
 pi install npm:pi-bedrock-mantle >/dev/null 2>&1 || true
 
+echo -e "  Installing git:github.com/NVlabs/SoL-Pi (NVIDIA Observation Compaction)..."
+pi install git:github.com/NVlabs/SoL-Pi >/dev/null 2>&1 || true
+
 # 1. SoL-Pi Configuration
 SOL_PI_CONF="${PI_AGENT_DIR}/sol-pi.json"
 cat > "${SOL_PI_CONF}" << 'EOF'
@@ -976,12 +979,28 @@ if [ "$CONFIG_ONLY" = true ]; then
 fi
 
 # ------------------------------------------------------------------------------
-# 7. Pre-flight Smoke Test
+# 7. Pre-flight Smoke Test & CLI Linking
 # ------------------------------------------------------------------------------
 echo -e "\n${CYAN}[7/7] Running pre-flight harness verification...${RESET}"
 
+# Build repository CLI and link globally if run from source
+if [ -f "${SCRIPT_DIR}/package.json" ]; then
+  echo -e "  Building Kobayashi CLI tools..."
+  if [ ! -d "${SCRIPT_DIR}/node_modules" ]; then
+    (cd "${SCRIPT_DIR}" && npm install --no-audit --prefer-offline 2>/dev/null || npm install)
+  fi
+  (cd "${SCRIPT_DIR}" && npm run build >/dev/null 2>&1 || true)
+  (cd "${SCRIPT_DIR}" && npm link >/dev/null 2>&1 || true)
+  if command -v kobayashi >/dev/null 2>&1; then
+    echo -e "  ✔ Kobayashi CLI linked globally: ${GREEN}$(which kobayashi)${RESET}"
+  fi
+fi
+
 if pi --help >/dev/null 2>&1; then
   echo -e "  ✔ Pi runtime responded successfully"
+  if pi --list-models 2>/dev/null | grep -q "planner-worker"; then
+    echo -e "  ✔ Virtual models ready: ${GREEN}auto/planner-worker${RESET} & ${GREEN}auto/bottom-up${RESET}"
+  fi
 else
   echo -e "  ${YELLOW}[WARN] Pi smoke test had non-zero exit code. Verify node & global npm packages.${RESET}"
 fi

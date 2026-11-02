@@ -37,18 +37,28 @@ Default coding agent harnesses dump 50+ to 500+ skills into every prompt, burn t
 
 ---
 
-## 🚀 1-Command Installation
+## 🚀 1-Command Setup (Works on Any Fresh Laptop)
 
-#### Option 1: Fast Direct Install (Recommended)
+#### Option 1: Git Clone & Auto-Setup (Single Command)
+```bash
+git clone https://github.com/devdeepjs/kobayashi-maru.git && cd kobayashi-maru && ./setup.sh
+```
+> [!NOTE]
+> Want zero interactive prompts? Run with `-y` for full silent automation:
+> ```bash
+> git clone https://github.com/devdeepjs/kobayashi-maru.git && cd kobayashi-maru && ./setup.sh -y
+> ```
+
+#### Option 2: Curl One-Liner (Zero-Clone)
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devdeepjs/kobayashi-maru/main/setup.sh | bash
 ```
 
-#### Option 2: Clone and Run Locally
+#### Option 3: Make or npm
 ```bash
-git clone https://github.com/devdeepjs/kobayashi-maru.git
-cd kobayashi-maru
-./setup.sh
+git clone https://github.com/devdeepjs/kobayashi-maru.git && cd kobayashi-maru && make
+# or
+git clone https://github.com/devdeepjs/kobayashi-maru.git && cd kobayashi-maru && npm run setup
 ```
 
 > [!TIP]
