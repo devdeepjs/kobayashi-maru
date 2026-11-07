@@ -104,6 +104,46 @@ kobayashi stats
 
 ---
 
+## 🔀 Create Your Own Custom Virtual Models
+
+You can pair **any planner model** with **any local or cloud worker model** under your own custom virtual model ID.
+
+#### 1. Interactive CLI Wizard
+```bash
+kobayashi virtual add
+```
+
+#### 2. Direct CLI One-Liner
+```bash
+kobayashi virtual add speed-demon \
+  --name "Speed Demon" \
+  --planner "anthropic/claude-3-5-haiku-20241022" \
+  --worker "ollama/qwen2.5-coder:14b-16k" \
+  --policy bottom-up
+```
+
+#### 3. Or in `~/.pi/agent/virtual-models.json`
+```json
+{
+  "custom": {
+    "speed-demon": {
+      "name": "Speed Demon",
+      "planner": "anthropic/claude-3-5-haiku-20241022",
+      "worker": "ollama/qwen2.5-coder:14b-16k",
+      "policy": "bottom-up"
+    }
+  }
+}
+```
+
+#### List & Run:
+```bash
+kobayashi virtual list         # View all active virtual models
+pi --model auto/speed-demon    # Run your custom virtual router
+```
+
+---
+
 ## 🏛️ The 6 Runtime Pillars
 
 Detailed architectural specifications are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md):

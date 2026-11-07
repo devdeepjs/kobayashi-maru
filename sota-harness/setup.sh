@@ -80,6 +80,7 @@ OPTIONS:
   --worker <model>      Set custom worker for virtual router (e.g. ollama/qwen2.5-coder:7b)
   --skills-repo <url>   Import custom skills from Git repository (Zero-friction for fresh laptops)
   --skills-dir <path>   Import custom skills from local directory
+  --create-virtual <sp> Create custom virtual model (<id>:<planner>:<worker>[:policy])
   --mcp-import          Import MCP servers from Claude Desktop & Cursor into Pi
   -h, --help            Show this help guide and exit
 
@@ -118,6 +119,12 @@ SKILLS_REPO=""
 SKILLS_DIR_INPUT=""
 CUSTOM_PLANNER=""
 CUSTOM_WORKER=""
+CREATE_VIRTUAL_SPEC=""
+CUSTOM_VM_ID=""
+CUSTOM_VM_NAME=""
+CUSTOM_VM_PLANNER=""
+CUSTOM_VM_WORKER=""
+CUSTOM_VM_POLICY="planner-worker"
 MCP_IMPORT=false
 
 # If run directly with no arguments in an interactive terminal, default to interactive wizard
@@ -183,6 +190,10 @@ while [ "$#" -gt 0 ]; do
       CUSTOM_WORKER="${2:-}"
       shift 2
       ;;
+    --create-virtual)
+      CREATE_VIRTUAL_SPEC="${2:-}"
+      shift 2
+      ;;
     --mcp-import)
       MCP_IMPORT=true
       shift
@@ -194,6 +205,12 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ -n "$CREATE_VIRTUAL_SPEC" ]; then
+  IFS=':' read -r CUSTOM_VM_ID CUSTOM_VM_PLANNER CUSTOM_VM_WORKER CUSTOM_VM_POLICY <<< "$CREATE_VIRTUAL_SPEC"
+  CUSTOM_VM_POLICY="${CUSTOM_VM_POLICY:-planner-worker}"
+  CUSTOM_VM_NAME="${CUSTOM_VM_ID}"
+fi
 
 if [ "$TELEMETRY_ONLY" = true ]; then
   if [ -x "${SCRIPT_DIR}/node_modules/.bin/tsx" ] && [ -f "${SCRIPT_DIR}/bin/kobayashi.ts" ]; then
@@ -457,6 +474,28 @@ if [ "$INTERACTIVE" = true ]; then
       else
         WORKER_MODEL="$INPUT_WORKER"
       fi
+    fi
+  fi
+
+  # Step: Create Custom Virtual Model
+  echo ""
+  read -r -p "Create your own custom virtual model (pair any planner + worker)? [y/N, default: N]: " CREATE_CUSTOM_VM_CHOICE
+  if [[ "$CREATE_CUSTOM_VM_CHOICE" =~ ^[Yy] ]]; then
+    read -r -p "  Enter virtual model ID (e.g. speed-coder): " CUSTOM_VM_ID
+    if [ -n "$CUSTOM_VM_ID" ]; then
+      read -r -p "  Enter friendly name [default: ${CUSTOM_VM_ID}]: " CUSTOM_VM_NAME
+      CUSTOM_VM_NAME="${CUSTOM_VM_NAME:-$CUSTOM_VM_ID}"
+      read -r -p "  Enter Planner model [e.g. bedrock-mantle/openai.gpt-5.6-luna]: " CUSTOM_VM_PLANNER
+      read -r -p "  Enter Worker model [e.g. ollama/ornith-1.5:ctx]: " CUSTOM_VM_WORKER
+      echo -e "  Routing Policy:"
+      echo -e "    [1] Top-Down (Planner reasons Turn 1 -> Worker executes Turn 2+ -> Planner escalates on error) [Default]"
+      echo -e "    [2] Bottom-Up (Local Worker executes at \$0 compute -> Planner escalates on error)"
+      read -r -p "  Select policy [1-2, default: 1]: " CUSTOM_VM_POLICY_CHOICE
+      CUSTOM_VM_POLICY="planner-worker"
+      if [ "$CUSTOM_VM_POLICY_CHOICE" = "2" ]; then
+        CUSTOM_VM_POLICY="bottom-up"
+      fi
+      echo -e "  ✔ Custom virtual model configured: ${GREEN}auto/${CUSTOM_VM_ID}${RESET}"
     fi
   fi
 
@@ -921,6 +960,26 @@ cat > "${VIRTUAL_MODELS_CONF}" << EOF
 }
 EOF
 echo -e "  ✔ Configured Virtual Models: ${GREEN}${VIRTUAL_MODELS_CONF}${RESET} (Planner: ${PLANNER_PROVIDER}/${PLANNER_MODEL}, Worker: ${WORKER_PROVIDER}/${WORKER_MODEL})"
+
+# Merge any new custom virtual model into virtual-models.json
+if [ -n "$CUSTOM_VM_ID" ] && [ -n "$CUSTOM_VM_PLANNER" ] && [ -n "$CUSTOM_VM_WORKER" ]; then
+  node -e "
+    const fs = require('fs');
+    const p = '${VIRTUAL_MODELS_CONF}';
+    let data = {};
+    try { data = JSON.parse(fs.readFileSync(p, 'utf8')); } catch {}
+    if (!data.custom) data.custom = {};
+    data.custom['${CUSTOM_VM_ID}'] = {
+      name: '${CUSTOM_VM_NAME:-$CUSTOM_VM_ID}',
+      provider: 'auto',
+      planner: '${CUSTOM_VM_PLANNER}',
+      worker: '${CUSTOM_VM_WORKER}',
+      policy: '${CUSTOM_VM_POLICY:-planner-worker}'
+    };
+    fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n');
+  " 2>/dev/null || true
+  echo -e "  ✔ Registered custom virtual model in ${GREEN}${VIRTUAL_MODELS_CONF}${RESET}: ${BOLD}auto/${CUSTOM_VM_ID}${RESET}"
+fi
 
 # 5. Keyless Jina Reader Web Routing for JavaScript Rendered Sites (Jira, Confluence, etc.)
 WEB_SEARCH_CONF="${PI_AGENT_DIR}/web-search.json"

@@ -26,11 +26,25 @@ export interface ModelSpec {
   thinking?: "off" | "low" | "medium" | "high" | "max";
 }
 
+export interface CustomVirtualModelSpec {
+  id: string;
+  name?: string;
+  provider?: string;
+  planner: ModelSpec;
+  worker: ModelSpec;
+  policy?: "planner-worker" | "bottom-up";
+  escalationThreshold?: number;
+  thinkingLevels?: ("off" | "low" | "medium" | "high" | "max")[];
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
 export interface VirtualModelsConfig {
   planner: ModelSpec;
   worker: ModelSpec;
   advisor?: ModelSpec;
   escalationThreshold: number;
+  custom?: Record<string, CustomVirtualModelSpec>;
 }
 
 const DEFAULT_PLANNER: ModelSpec = {
@@ -104,6 +118,7 @@ export function loadVirtualModelConfig(): VirtualModelsConfig {
   let worker = { ...DEFAULT_WORKER };
   let advisor = { ...DEFAULT_ADVISOR };
   let escalationThreshold = 2;
+  const custom: Record<string, CustomVirtualModelSpec> = {};
 
   // 1. Load from ~/.pi/agent/virtual-models.json
   try {
@@ -125,6 +140,34 @@ export function loadVirtualModelConfig(): VirtualModelsConfig {
       if (typeof data.escalationThreshold === "number" && data.escalationThreshold > 0) {
         escalationThreshold = data.escalationThreshold;
       }
+
+      // Parse custom user virtual models from data.custom or data.virtualModels
+      const rawCustom = data.custom || data.virtualModels || {};
+      if (typeof rawCustom === "object" && rawCustom !== null) {
+        for (const [id, spec] of Object.entries(rawCustom)) {
+          if (typeof spec === "object" && spec !== null) {
+            const customObj = spec as any;
+            const plannerSpec = parseModelSpec(customObj.planner, planner.provider, planner.model, "medium");
+            const workerSpec = parseModelSpec(customObj.worker, worker.provider, worker.model, "off");
+            custom[id] = {
+              id,
+              name: customObj.name || `Custom Virtual Model (${id})`,
+              provider: customObj.provider || "auto",
+              planner: plannerSpec,
+              worker: workerSpec,
+              policy: customObj.policy === "bottom-up" ? "bottom-up" : "planner-worker",
+              escalationThreshold: typeof customObj.escalationThreshold === "number" && customObj.escalationThreshold > 0
+                ? customObj.escalationThreshold
+                : escalationThreshold,
+              thinkingLevels: Array.isArray(customObj.thinkingLevels)
+                ? customObj.thinkingLevels
+                : ["off", "low", "medium", "high"],
+              contextWindow: typeof customObj.contextWindow === "number" ? customObj.contextWindow : 128_000,
+              maxTokens: typeof customObj.maxTokens === "number" ? customObj.maxTokens : 16_384,
+            };
+          }
+        }
+      }
     }
   } catch {
     // Graceful fallback to default configuration
@@ -145,7 +188,7 @@ export function loadVirtualModelConfig(): VirtualModelsConfig {
     if (!isNaN(parsed) && parsed > 0) escalationThreshold = parsed;
   }
 
-  return { planner, worker, advisor, escalationThreshold };
+  return { planner, worker, advisor, escalationThreshold, custom };
 }
 
 export function resolveModel(ctx: ExtensionContext, target: ModelSpec) {
@@ -220,9 +263,203 @@ function userRequestedFrontier(messages: readonly Message[]): boolean {
   return /\b(escalate|frontier|planner|think hard|complex design|architect)\b/i.test(content);
 }
 
+export function createPlannerWorkerRoute(
+  plannerSpec: ModelSpec,
+  workerSpec: ModelSpec,
+  escalationThreshold = 2
+) {
+  return async function route(
+    request: ModelRouteRequest<PlannerWorkerState>,
+    ctx: ExtensionContext
+  ): Promise<ModelRoute<PlannerWorkerState>> {
+    const plannerModel = resolveModel(ctx, plannerSpec);
+    const workerModel = resolveModel(ctx, workerSpec);
+
+    if (request.reason === "direct") {
+      if (!plannerModel) {
+        if (workerModel) return { model: workerModel, thinkingLevel: "off" };
+        throw new Error(`Configured planner model ${plannerSpec.provider}/${plannerSpec.model} not found in model registry`);
+      }
+      return { model: plannerModel, thinkingLevel: plannerSpec.thinking ?? "low" };
+    }
+
+    const state: PlannerWorkerState = request.state
+      ? { ...request.state }
+      : { phase: "planner", turnCount: 0, workerFailures: 0 };
+
+    // 1. Retry failover: If the worker failed (e.g. Ollama daemon offline or error), failover to planner immediately
+    if (request.reason === "retry" && request.failed && workerModel && request.failed.model.id === workerModel.id) {
+      state.phase = "escalated";
+      state.escalationReason = `Worker failed: ${request.failed.message?.errorMessage || "Service offline"}. Failover to planner.`;
+      if (plannerModel) {
+        return { model: plannerModel, thinkingLevel: plannerSpec.thinking ?? "low", state };
+      }
+    }
+
+    state.turnCount++;
+
+    // Check tool results
+    const result = lastToolResult(request.messages);
+    if (result) {
+      if (result.isError) {
+        state.workerFailures++;
+      } else {
+        state.workerFailures = 0;
+        if (state.phase === "escalated") {
+          // Once blocker resolved, transition back to worker
+          state.phase = "worker";
+        }
+      }
+    }
+
+    // Check manual escalation
+    if (request.reason === "user" && userRequestedFrontier(request.messages)) {
+      state.phase = "escalated";
+      state.escalationReason = "User requested planner reasoning";
+      state.workerFailures = 0;
+    }
+
+    // Worker failed repeatedly -> escalate to Planner
+    if (state.phase === "worker" && state.workerFailures >= escalationThreshold) {
+      state.phase = "escalated";
+      state.escalationReason = `Escalated to planner (${plannerSpec.model}) after ${state.workerFailures} worker failures`;
+    }
+
+    // Transition from planner to worker only when planner has completed its cycle:
+    // i.e., it produced a text/plan output (NOT an intermediate toolCall),
+    // or reached the planner turn budget (max 3 planning turns).
+    const assistantMsgs = request.messages.filter((m: any) => m.role === "assistant");
+    const lastAssistant = assistantMsgs.at(-1);
+    const isToolCalling = lastAssistant && Array.isArray(lastAssistant.content) &&
+      lastAssistant.content.some((part: any) => part.type === "toolCall");
+
+    if (state.phase === "planner" && assistantMsgs.length >= 1) {
+      if (!isToolCalling || assistantMsgs.length >= 3) {
+        state.phase = "worker";
+      }
+    }
+
+    // Resolve Planner (Luna / Sonnet / DeepSeek / o3-mini)
+    if (state.phase === "planner" || state.phase === "escalated") {
+      if (!plannerModel) {
+        if (workerModel) return { model: workerModel, thinkingLevel: "off", state };
+        throw new Error(`Planner model ${plannerSpec.provider}/${plannerSpec.model} not available`);
+      }
+      return {
+        model: plannerModel,
+        thinkingLevel: request.thinkingLevel ?? plannerSpec.thinking ?? "medium",
+        state,
+      };
+    }
+
+    // Resolve Worker (Local Ollama / Qwen / Cursor Fast)
+    if (!workerModel) {
+      if (plannerModel) {
+        return { model: plannerModel, thinkingLevel: "low", state };
+      }
+      throw new Error("Neither worker nor planner model available in registry");
+    }
+
+    return {
+      model: workerModel,
+      thinkingLevel: workerSpec.thinking ?? "off",
+      state,
+    };
+  };
+}
+
+export function createBottomUpRoute(
+  plannerSpec: ModelSpec,
+  workerSpec: ModelSpec,
+  escalationThreshold = 2
+) {
+  return async function route(
+    request: ModelRouteRequest<RouterState>,
+    ctx: ExtensionContext
+  ): Promise<ModelRoute<RouterState>> {
+    const plannerModel = resolveModel(ctx, plannerSpec);
+    const workerModel = resolveModel(ctx, workerSpec);
+
+    if (request.reason === "direct") {
+      if (!plannerModel) {
+        if (workerModel) return { model: workerModel, thinkingLevel: "off" };
+        throw new Error(`Frontier model ${plannerSpec.provider}/${plannerSpec.model} not found`);
+      }
+      return { model: plannerModel, thinkingLevel: plannerSpec.thinking ?? "low" };
+    }
+
+    const state: RouterState = request.state ? { ...request.state } : { phase: "workhorse", failures: 0 };
+
+    // 1. Retry failover: If the worker failed on retry, failover to planner immediately
+    if (request.reason === "retry" && request.failed && workerModel && request.failed.model.id === workerModel.id) {
+      state.phase = "frontier";
+      state.escalationReason = `Worker failed: ${request.failed.message?.errorMessage || "Service offline"}. Failover to planner.`;
+      if (plannerModel) {
+        return { model: plannerModel, thinkingLevel: plannerSpec.thinking ?? "medium", state };
+      }
+    }
+
+    if (request.reason === "user" && userRequestedFrontier(request.messages)) {
+      state.phase = "frontier";
+      state.escalationReason = "User requested planner reasoning";
+      state.failures = 0;
+    }
+
+    const result = lastToolResult(request.messages);
+    if (result) {
+      if (result.isError) {
+        state.failures++;
+      } else {
+        state.failures = 0;
+      }
+    }
+
+    if (state.phase === "workhorse" && state.failures >= escalationThreshold) {
+      state.phase = "frontier";
+      state.escalationReason = `Escalated after ${state.failures} consecutive failures`;
+    }
+
+    const sticky = request.failed ?? request.previous;
+    if (request.reason === "continuation" && sticky && state.phase === "workhorse" && state.failures < escalationThreshold) {
+      return {
+        model: sticky.model,
+        thinkingLevel: sticky.thinkingLevel ?? workerSpec.thinking ?? "off",
+        state,
+      };
+    }
+
+    if (state.phase === "frontier") {
+      if (!plannerModel) {
+        if (workerModel) return { model: workerModel, thinkingLevel: "off", state };
+        throw new Error(`Planner model ${plannerSpec.provider}/${plannerSpec.model} not found`);
+      }
+      return {
+        model: plannerModel,
+        thinkingLevel: request.thinkingLevel ?? plannerSpec.thinking ?? "medium",
+        state,
+      };
+    }
+
+    if (!workerModel) {
+      if (plannerModel) {
+        return { model: plannerModel, thinkingLevel: "low", state };
+      }
+      throw new Error("Neither workhorse nor planner model available");
+    }
+
+    return {
+      model: workerModel,
+      thinkingLevel: workerSpec.thinking ?? "off",
+      state,
+    };
+  };
+}
+
 export default function (pi: ExtensionAPI) {
+  const config = loadVirtualModelConfig();
+
   // --------------------------------------------------------------------------
-  // Model 1: auto/planner-worker (Dynamic Planner -> Dynamic Worker -> Planner Escalate)
+  // Model 1: auto/planner-worker (Built-in Dynamic Planner -> Dynamic Worker)
   // --------------------------------------------------------------------------
   pi.registerVirtualModel<PlannerWorkerState>({
     provider: "auto",
@@ -231,108 +468,11 @@ export default function (pi: ExtensionAPI) {
     thinkingLevels: ["off", "low", "medium", "high"],
     contextWindow: 128_000,
     maxTokens: 16_384,
-
-    async route(request: ModelRouteRequest<PlannerWorkerState>, ctx: ExtensionContext): Promise<ModelRoute<PlannerWorkerState>> {
-      const config = loadVirtualModelConfig();
-      const plannerModel = resolveModel(ctx, config.planner);
-      const workerModel = resolveModel(ctx, config.worker);
-
-      if (request.reason === "direct") {
-        if (!plannerModel) {
-          if (workerModel) return { model: workerModel, thinkingLevel: "off" };
-          throw new Error(`Configured planner model ${config.planner.provider}/${config.planner.model} not found in model registry`);
-        }
-        return { model: plannerModel, thinkingLevel: config.planner.thinking ?? "low" };
-      }
-
-      const state: PlannerWorkerState = request.state
-        ? { ...request.state }
-        : { phase: "planner", turnCount: 0, workerFailures: 0 };
-
-      // 1. Retry failover: If the worker failed (e.g. Ollama daemon offline or error), failover to planner immediately
-      if (request.reason === "retry" && request.failed && workerModel && request.failed.model.id === workerModel.id) {
-        state.phase = "escalated";
-        state.escalationReason = `Worker failed: ${request.failed.message?.errorMessage || "Service offline"}. Failover to planner.`;
-        if (plannerModel) {
-          return { model: plannerModel, thinkingLevel: config.planner.thinking ?? "low", state };
-        }
-      }
-
-      state.turnCount++;
-
-      // Check tool results
-      const result = lastToolResult(request.messages);
-      if (result) {
-        if (result.isError) {
-          state.workerFailures++;
-        } else {
-          state.workerFailures = 0;
-          if (state.phase === "escalated") {
-            // Once blocker resolved, transition back to worker
-            state.phase = "worker";
-          }
-        }
-      }
-
-      // Check manual escalation
-      if (request.reason === "user" && userRequestedFrontier(request.messages)) {
-        state.phase = "escalated";
-        state.escalationReason = "User requested planner reasoning";
-        state.workerFailures = 0;
-      }
-
-      // Worker failed repeatedly -> escalate to Planner
-      if (state.phase === "worker" && state.workerFailures >= config.escalationThreshold) {
-        state.phase = "escalated";
-        state.escalationReason = `Escalated to planner (${config.planner.model}) after ${state.workerFailures} worker failures`;
-      }
-
-      // Transition from planner to worker only when planner has completed its cycle:
-      // i.e., it produced a text/plan output (NOT an intermediate toolCall),
-      // or reached the planner turn budget (max 3 planning turns).
-      const assistantMsgs = request.messages.filter((m) => m.role === "assistant");
-      const lastAssistant = assistantMsgs.at(-1);
-      const isToolCalling = lastAssistant && Array.isArray(lastAssistant.content) &&
-        lastAssistant.content.some((part: any) => part.type === "toolCall");
-
-      if (state.phase === "planner" && assistantMsgs.length >= 1) {
-        // If the planner just emitted a tool call, keep it in planner phase so it receives and interprets the result
-        if (!isToolCalling || assistantMsgs.length >= 3) {
-          state.phase = "worker";
-        }
-      }
-
-      // Resolve Planner (Luna / Sonnet / DeepSeek / o3-mini)
-      if (state.phase === "planner" || state.phase === "escalated") {
-        if (!plannerModel) {
-          if (workerModel) return { model: workerModel, thinkingLevel: "off", state };
-          throw new Error(`Planner model ${config.planner.provider}/${config.planner.model} not available`);
-        }
-        return {
-          model: plannerModel,
-          thinkingLevel: request.thinkingLevel ?? config.planner.thinking ?? "medium",
-          state,
-        };
-      }
-
-      // Resolve Worker (Local Ollama / Qwen / Cursor Fast)
-      if (!workerModel) {
-        if (plannerModel) {
-          return { model: plannerModel, thinkingLevel: "low", state };
-        }
-        throw new Error("Neither worker nor planner model available in registry");
-      }
-
-      return {
-        model: workerModel,
-        thinkingLevel: config.worker.thinking ?? "off",
-        state,
-      };
-    },
+    route: createPlannerWorkerRoute(config.planner, config.worker, config.escalationThreshold),
   });
 
   // --------------------------------------------------------------------------
-  // Model 2: auto/bottom-up (Bottom-Up: Configurable Workhorse First -> Planner on Failure)
+  // Model 2: auto/bottom-up (Built-in Bottom-Up: $0 Workhorse First -> Planner)
   // --------------------------------------------------------------------------
   pi.registerVirtualModel<RouterState>({
     provider: "auto",
@@ -341,84 +481,42 @@ export default function (pi: ExtensionAPI) {
     thinkingLevels: ["off", "low", "medium", "high"],
     contextWindow: 128_000,
     maxTokens: 16_384,
-
-    async route(request: ModelRouteRequest<RouterState>, ctx: ExtensionContext): Promise<ModelRoute<RouterState>> {
-      const config = loadVirtualModelConfig();
-      const plannerModel = resolveModel(ctx, config.planner);
-      const workerModel = resolveModel(ctx, config.worker);
-
-      if (request.reason === "direct") {
-        if (!plannerModel) {
-          if (workerModel) return { model: workerModel, thinkingLevel: "off" };
-          throw new Error(`Frontier model ${config.planner.provider}/${config.planner.model} not found`);
-        }
-        return { model: plannerModel, thinkingLevel: config.planner.thinking ?? "low" };
-      }
-
-      const state: RouterState = request.state ? { ...request.state } : { phase: "workhorse", failures: 0 };
-
-      // 1. Retry failover: If the worker failed on retry, failover to planner immediately
-      if (request.reason === "retry" && request.failed && workerModel && request.failed.model.id === workerModel.id) {
-        state.phase = "frontier";
-        state.escalationReason = `Worker failed: ${request.failed.message?.errorMessage || "Service offline"}. Failover to planner.`;
-        if (plannerModel) {
-          return { model: plannerModel, thinkingLevel: config.planner.thinking ?? "medium", state };
-        }
-      }
-
-      if (request.reason === "user" && userRequestedFrontier(request.messages)) {
-        state.phase = "frontier";
-        state.escalationReason = "User requested planner reasoning";
-        state.failures = 0;
-      }
-
-      const result = lastToolResult(request.messages);
-      if (result) {
-        if (result.isError) {
-          state.failures++;
-        } else {
-          state.failures = 0;
-        }
-      }
-
-      if (state.phase === "workhorse" && state.failures >= config.escalationThreshold) {
-        state.phase = "frontier";
-        state.escalationReason = `Escalated after ${state.failures} consecutive failures`;
-      }
-
-      const sticky = request.failed ?? request.previous;
-      if (request.reason === "continuation" && sticky && state.phase === "workhorse" && state.failures < config.escalationThreshold) {
-        return {
-          model: sticky.model,
-          thinkingLevel: sticky.thinkingLevel ?? config.worker.thinking ?? "off",
-          state,
-        };
-      }
-
-      if (state.phase === "frontier") {
-        if (!plannerModel) {
-          if (workerModel) return { model: workerModel, thinkingLevel: "off", state };
-          throw new Error(`Planner model ${config.planner.provider}/${config.planner.model} not found`);
-        }
-        return {
-          model: plannerModel,
-          thinkingLevel: request.thinkingLevel ?? config.planner.thinking ?? "medium",
-          state,
-        };
-      }
-
-      if (!workerModel) {
-        if (plannerModel) {
-          return { model: plannerModel, thinkingLevel: "low", state };
-        }
-        throw new Error("Neither workhorse nor planner model available");
-      }
-
-      return {
-        model: workerModel,
-        thinkingLevel: config.worker.thinking ?? "off",
-        state,
-      };
-    },
+    route: createBottomUpRoute(config.planner, config.worker, config.escalationThreshold),
   });
+
+  // --------------------------------------------------------------------------
+  // User Custom Virtual Models (Configured via ~/.pi/agent/virtual-models.json)
+  // --------------------------------------------------------------------------
+  if (config.custom) {
+    for (const [id, customSpec] of Object.entries(config.custom)) {
+      const provider = customSpec.provider || "auto";
+      const name = customSpec.name || `Custom Router: ${id}`;
+      const thinkingLevels = (customSpec.thinkingLevels as any) || ["off", "low", "medium", "high"];
+      const contextWindow = customSpec.contextWindow || 128_000;
+      const maxTokens = customSpec.maxTokens || 16_384;
+      const threshold = customSpec.escalationThreshold || config.escalationThreshold;
+
+      if (customSpec.policy === "bottom-up") {
+        pi.registerVirtualModel<RouterState>({
+          provider,
+          id,
+          name,
+          thinkingLevels,
+          contextWindow,
+          maxTokens,
+          route: createBottomUpRoute(customSpec.planner, customSpec.worker, threshold),
+        });
+      } else {
+        pi.registerVirtualModel<PlannerWorkerState>({
+          provider,
+          id,
+          name,
+          thinkingLevels,
+          contextWindow,
+          maxTokens,
+          route: createPlannerWorkerRoute(customSpec.planner, customSpec.worker, threshold),
+        });
+      }
+    }
+  }
 }

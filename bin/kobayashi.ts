@@ -10,6 +10,7 @@ import { configCommand } from "../src/cli/commands/config.js";
 import { statsCommand } from "../src/cli/commands/stats.js";
 import { evalCommand } from "../src/cli/commands/eval.js";
 import { mcpCommand } from "../src/cli/commands/mcp.js";
+import { virtualCommand } from "../src/cli/commands/virtual.js";
 
 const program = new Command();
 
@@ -80,6 +81,22 @@ program
   .description("Import and configure MCP servers from Claude Desktop or Cursor into Pi")
   .option("-i, --import [source]", "Import MCP servers from Claude Desktop, Cursor, or custom path")
   .action((options) => mcpCommand({ importSource: typeof options.import === "string" ? options.import : undefined }));
+
+program
+  .command("virtual [action] [id]")
+  .description("List, create, and configure custom virtual model routers (pair any planner + worker)")
+  .option("--id <id>", "Virtual model identifier (e.g. speed-coder)")
+  .option("-n, --name <name>", "Friendly display name for the virtual model")
+  .option("-p, --planner <model>", "Planner model (e.g. bedrock-mantle/openai.gpt-5.6-luna)")
+  .option("-w, --worker <model>", "Worker model (e.g. ollama/ornith-1.5:ctx)")
+  .option("--policy <policy>", "Routing policy ('planner-worker' | 'bottom-up')")
+  .option("--threshold <number>", "Escalation threshold on worker failures")
+  .option("--default", "Set as default model in Pi settings.json")
+  .action((action, extraId, options) => {
+    const idVal = typeof extraId === "string" ? extraId : undefined;
+    const optVal = typeof extraId === "object" && extraId !== null ? extraId : options || {};
+    return virtualCommand(action, idVal, optVal);
+  });
 
 program
   .command("advisor <question>")
