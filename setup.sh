@@ -69,6 +69,7 @@ USAGE:
 OPTIONS:
   -i, --interactive     Run guided interactive setup wizard (default in interactive terminal)
   -y, --yes             Run non-interactive setup with recommended defaults
+  --overlay             Non-destructive 1-command overlay on existing Pi (cleans broken links, backfills stats)
   --telemetry, --stats  Display top-down F1 Pit Wall executive efficiency scorecard & savings
   --skills-only         Synchronize bundled Matt Pocock & custom skills only
   --extensions-only     Deploy Pi harness extensions only
@@ -145,6 +146,9 @@ while [ "$#" -gt 0 ]; do
       NON_INTERACTIVE=true
       INTERACTIVE=false
       shift
+      ;;
+    --overlay)
+      exec "${SCRIPT_DIR}/install.sh"
       ;;
     --telemetry|--stats)
       TELEMETRY_ONLY=true

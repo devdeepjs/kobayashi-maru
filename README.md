@@ -61,6 +61,18 @@ git clone https://github.com/devdeepjs/kobayashi-maru.git && cd kobayashi-maru &
 git clone https://github.com/devdeepjs/kobayashi-maru.git && cd kobayashi-maru && npm run setup
 ```
 
+#### Option 4: Non-Destructive Overlay on Existing Pi (1 Command)
+Already have Pi installed? Layer Kobayashi Maru on top without touching your existing `auth.json` API keys:
+```bash
+curl -fsSL https://raw.githubusercontent.com/devdeepjs/kobayashi-maru/main/install.sh | bash
+# or inside the repo:
+./install.sh
+```
+- **Preserves existing credentials**: Never modifies or deletes `~/.pi/agent/auth.json`.
+- **Cleans up broken symlinks**: Eliminates dead symlinks from Pi updates (fixing `spawn Unknown system error -86`).
+- **Zero-bloat MCP**: Configures MCP servers with `exposure: "deferred"` so cold-start prompt schemas are never inflated.
+- **Retroactive Session Backfill**: Automatically scans `~/.pi/agent/sessions/` to restore historical tokens, costs, and ROI into `kobayashi stats`.
+
 > [!TIP]
 > **Executive & Non-Hands-On Friendly**:  
 > Running `./setup.sh` launches an interactive wizard that detects your environment, configures your preferred provider backends, and bakes local 32K workhorse models automatically. See the [Executive Setup Guide](docs/EXECUTIVE_SETUP_GUIDE.md).

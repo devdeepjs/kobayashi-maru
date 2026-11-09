@@ -186,7 +186,7 @@ export default function (pi: ExtensionAPI) {
     const promptText = (event as any).prompt || (event as any).userPrompt || "";
     const isWebRequested = /\b(web|search|browse|fetch|url|http|https|docs|online|google|jira|atlassian)\b/i.test(promptText);
 
-    // 1. Minimal Tool Seam: Filter noisy tools from the active model schema
+    // 1. Minimal Tool Seam: Filter noisy tools & context-gate MCP tools from the active model schema
     if (event.systemPromptOptions.selectedTools) {
       const PASSIVE_TOOLS = new Set([
         "fetch_budget_from_portkey",
@@ -196,9 +196,25 @@ export default function (pi: ExtensionAPI) {
         "subagent",
         ...(!isWebRequested ? ["web_search", "source_check", "fetch_content", "get_search_content"] : [])
       ]);
-      event.systemPromptOptions.selectedTools = event.systemPromptOptions.selectedTools.filter(
-        (t) => !PASSIVE_TOOLS.has(t)
-      );
+
+      event.systemPromptOptions.selectedTools = event.systemPromptOptions.selectedTools.filter((t) => {
+        if (PASSIVE_TOOLS.has(t)) return false;
+        // Context-gate MCP tools (mcp__<server>__<tool>): omit unless prompt references server or tool keywords
+        if (t.startsWith("mcp__")) {
+          const parts = t.split("__");
+          if (parts.length >= 2) {
+            const serverName = parts[1].toLowerCase().replace(/[-_]/g, "");
+            const toolName = (parts[2] || "").toLowerCase().replace(/[-_]/g, "");
+            const promptNorm = promptText.toLowerCase().replace(/[-_]/g, "");
+            const serverMatch = serverName.length >= 3 && promptNorm.includes(serverName);
+            const toolMatch = toolName.length >= 4 && promptNorm.includes(toolName);
+            if (!serverMatch && !toolMatch) {
+              return false;
+            }
+          }
+        }
+        return true;
+      });
     }
 
     // 2. Intent-based Skill Injection: Zero tokens on generic prompts

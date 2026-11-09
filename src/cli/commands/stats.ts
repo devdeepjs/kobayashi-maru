@@ -5,10 +5,184 @@ import chalk from "chalk";
 import { spawn, exec } from "child_process";
 import { logger } from "../../utils/logger.js";
 
-const PI_DIR = path.join(os.homedir(), ".pi", "agent");
+const PI_DIR = process.env.PI_AGENT_DIR || path.join(os.homedir(), ".pi", "agent");
 const LEDGER_PATH = path.join(PI_DIR, "savings-ledger.jsonl");
 const SPILL_DIR = path.join(PI_DIR, "spill");
 const EXEC_DASH_SCRIPT = path.join(PI_DIR, "exec-dashboard.mjs");
+
+export const PRICING_TABLE: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  "ornith-1.5:ctx": { input: 0.0, output: 0.0, cacheRead: 0.0, cacheWrite: 0.0 },
+  "ornith-1.5:9b": { input: 0.0, output: 0.0, cacheRead: 0.0, cacheWrite: 0.0 },
+  "openai.gpt-5.6-luna": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22 },
+  "openai.gpt-6-luna": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22 },
+  "us.openai.gpt-6-sol": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22 },
+  "us.openai.gpt-6-luna": { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22 },
+  "global.anthropic.claude-haiku-5-5": { input: 0.80, output: 4.00, cacheRead: 0.08, cacheWrite: 0.80 },
+  "global.anthropic.claude-haiku-4-5-20251001-v1:0": { input: 0.80, output: 4.00, cacheRead: 0.08, cacheWrite: 0.80 },
+  "us.anthropic.claude-sonnet-5-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+  "us.anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+  "global.anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+  "global.anthropic.claude-sonnet-5-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+  "us.anthropic.claude-sonnet-4-6": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+  "us.anthropic.claude-sonnet-4-5-20250929-v1:0": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+  "anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+  "au.anthropic.claude-opus-4-6-v1": { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 18.75 },
+  "deepseek/deepseek-v4-flash": { input: 0.14, output: 0.28, cacheRead: 0.014, cacheWrite: 0.14 },
+};
+
+export const SONNET_BASELINE = { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 };
+
+export function calculateTurnCosts(
+  modelName: string,
+  usage: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number }
+): { actualUsd: number; sonnetBaselineUsd: number } {
+  const input = usage.input || 0;
+  const output = usage.output || 0;
+  const cacheRead = usage.cacheRead || 0;
+  const cacheWrite = usage.cacheWrite || 0;
+
+  const sonnetBaselineUsd =
+    (input * SONNET_BASELINE.input +
+      output * SONNET_BASELINE.output +
+      cacheRead * SONNET_BASELINE.cacheRead +
+      cacheWrite * SONNET_BASELINE.cacheWrite) /
+    1_000_000;
+
+  const cleanModel = (modelName || "").split("/").pop() || "";
+  let rate = PRICING_TABLE[cleanModel];
+  if (!rate) {
+    if (/ornith|qwen|llama|mistral|deepseek-r1|local/i.test(cleanModel) || modelName.startsWith("ollama")) {
+      rate = { input: 0.0, output: 0.0, cacheRead: 0.0, cacheWrite: 0.0 };
+    } else if (/haiku/i.test(cleanModel)) {
+      rate = { input: 0.80, output: 4.00, cacheRead: 0.08, cacheWrite: 0.80 };
+    } else if (/sonnet/i.test(cleanModel)) {
+      rate = { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 };
+    } else if (/opus/i.test(cleanModel)) {
+      rate = { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 18.75 };
+    } else if (/deepseek/i.test(cleanModel)) {
+      rate = { input: 0.14, output: 0.28, cacheRead: 0.014, cacheWrite: 0.14 };
+    } else {
+      rate = { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22 };
+    }
+  }
+
+  const actualUsd =
+    (input * rate.input +
+      output * rate.output +
+      cacheRead * rate.cacheRead +
+      cacheWrite * rate.cacheWrite) /
+    1_000_000;
+
+  return { actualUsd, sonnetBaselineUsd };
+}
+
+export function syncSessionsToLedger(piDir: string = PI_DIR): { syncedCount: number; totalSessions: number } {
+  const sessionsDir = path.join(piDir, "sessions");
+  const ledgerFile = path.join(piDir, "savings-ledger.jsonl");
+
+  if (!fs.existsSync(sessionsDir)) {
+    return { syncedCount: 0, totalSessions: 0 };
+  }
+
+  const existingSignatures = new Set<string>();
+  if (fs.existsSync(ledgerFile)) {
+    try {
+      const existingLines = fs.readFileSync(ledgerFile, "utf8").trim().split("\n").filter(Boolean);
+      for (const line of existingLines) {
+        try {
+          const entry = JSON.parse(line);
+          if (entry.ts) {
+            existingSignatures.add(entry.ts);
+            if (entry.model && entry.inputTokens !== undefined) {
+              existingSignatures.add(`${entry.ts}_${entry.model}_${entry.inputTokens}_${entry.outputTokens}`);
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  function getFiles(dir: string): string[] {
+    let results: string[] = [];
+    try {
+      const list = fs.readdirSync(dir);
+      for (const file of list) {
+        const full = path.join(dir, file);
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) results = results.concat(getFiles(full));
+        else if (file.endsWith(".jsonl")) results.push(full);
+      }
+    } catch {}
+    return results;
+  }
+
+  const sessionFiles = getFiles(sessionsDir);
+  let syncedCount = 0;
+  const entriesToAppend: string[] = [];
+
+  for (const file of sessionFiles) {
+    try {
+      const lines = fs.readFileSync(file, "utf8").trim().split("\n").filter(Boolean);
+      for (const l of lines) {
+        try {
+          const obj = JSON.parse(l);
+          if (obj.type === "message" && obj.message && obj.message.role === "assistant" && obj.message.usage) {
+            const ts = obj.timestamp || (obj.message.timestamp ? new Date(obj.message.timestamp).toISOString() : null);
+            const model = obj.message.model || "unknown";
+            const u = obj.message.usage;
+            const sig1 = ts;
+            const sig2 = `${ts}_${model}_${u.input || 0}_${u.output || 0}`;
+
+            if (ts && (existingSignatures.has(sig1) || existingSignatures.has(sig2))) {
+              continue;
+            }
+
+            const { actualUsd, sonnetBaselineUsd } = calculateTurnCosts(model, u);
+            let event = "other";
+            if (/ornith|qwen|llama|local|ollama/i.test(model)) {
+              event = "workhorse";
+            } else if (/luna|mantle|gpt/i.test(model)) {
+              event = "orchestrator";
+            } else if (/sonnet|opus|advisor/i.test(model)) {
+              event = "advisor";
+            } else if (/haiku/i.test(model)) {
+              event = "triage";
+            }
+
+            const record = {
+              ts: ts || new Date().toISOString(),
+              event,
+              model,
+              provider: obj.message.provider || "unknown",
+              exact: true,
+              inputTokens: u.input || 0,
+              cacheReadTokens: u.cacheRead || 0,
+              cacheWriteTokens: u.cacheWrite || 0,
+              outputTokens: u.output || 0,
+              totalTokens: (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0),
+              actualUsd: Number(actualUsd.toFixed(6)),
+              sonnetBaselineUsd: Number(sonnetBaselineUsd.toFixed(6)),
+            };
+
+            entriesToAppend.push(JSON.stringify(record));
+            syncedCount++;
+            if (ts) {
+              existingSignatures.add(sig1);
+              existingSignatures.add(sig2);
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  if (entriesToAppend.length > 0) {
+    fs.mkdirSync(path.dirname(ledgerFile), { recursive: true });
+    fs.appendFileSync(ledgerFile, entriesToAppend.join("\n") + "\n");
+  }
+
+  return { syncedCount, totalSessions: sessionFiles.length };
+}
 
 interface LedgerEntry {
   ts: string;
@@ -57,6 +231,9 @@ function printCardEmpty(colorHex: string) {
 }
 
 export async function statsCommand(options: { web?: boolean; json?: boolean }): Promise<void> {
+  // Always synchronize Pi session turns with savings ledger to prevent telemetry loss across Pi updates
+  const syncResult = syncSessionsToLedger(PI_DIR);
+
   if (options.web) {
     let dashScript = fs.existsSync(EXEC_DASH_SCRIPT) ? EXEC_DASH_SCRIPT : null;
     if (!dashScript) {
@@ -97,6 +274,15 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
     .trim()
     .split("\n")
     .filter(Boolean);
+
+  if (lines.length === 0) {
+    console.log(chalk.hex("#fbbf24")("No telemetry entries recorded yet."));
+    return;
+  }
+
+  if (syncResult.syncedCount > 0 && !options.json) {
+    console.log(chalk.hex("#10b981")(`  ✔ Reconciled & backfilled ${syncResult.syncedCount} historical assistant turns from ${syncResult.totalSessions} sessions.`));
+  }
 
   let totalActualUsd = 0;
   let totalBaselineUsd = 0;

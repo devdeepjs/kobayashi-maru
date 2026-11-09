@@ -77,10 +77,32 @@ program
   .action(skillsCommand);
 
 program
-  .command("mcp")
-  .description("Import and configure MCP servers from Claude Desktop or Cursor into Pi")
+  .command("mcp [action] [name]")
+  .description("List, add, remove, and import MCP servers with zero-bloat deferred exposure")
   .option("-i, --import [source]", "Import MCP servers from Claude Desktop, Cursor, or custom path")
-  .action((options) => mcpCommand({ importSource: typeof options.import === "string" ? options.import : undefined }));
+  .option("-c, --command <command>", "Executable command for new MCP server")
+  .option("-a, --args <args...>", "Arguments for the MCP server executable")
+  .option("-e, --exposure <exposure>", "Tool exposure ('deferred', 'direct', 'model-only')", "deferred")
+  .action((action, name, options) => {
+    let act: "list" | "add" | "remove" | "import" = "list";
+    let targetName = typeof name === "string" ? name : undefined;
+    if (action === "add" || action === "remove" || action === "import" || action === "list") {
+      act = action;
+    } else if (options.import) {
+      act = "import";
+    } else if (typeof action === "string" && action) {
+      targetName = action;
+      act = options.command ? "add" : "list";
+    }
+    return mcpCommand({
+      action: act,
+      name: targetName,
+      importSource: typeof options.import === "string" ? options.import : undefined,
+      command: options.command,
+      args: options.args,
+      exposure: options.exposure,
+    });
+  });
 
 program
   .command("virtual [action] [id]")

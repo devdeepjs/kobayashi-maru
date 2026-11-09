@@ -16,6 +16,9 @@
     "telemetry": "tsx bin/kobayashi.ts stats",
     "telemetry:web": "tsx bin/kobayashi.ts stats --web",
     "test": "tsx --test test/*.test.ts",
+    "test:live": "tsx test/test-runtime-live.ts",
+    "test:isolated": "tsx test/test-isolated-overlay.ts",
+    "overlay": "bash ./install.sh",
     "typecheck": "tsc --noEmit",
     "build": "tsc"
   },
