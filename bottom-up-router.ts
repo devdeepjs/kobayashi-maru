@@ -521,9 +521,23 @@ export default function (pi: ExtensionAPI) {
   }
 
   // --------------------------------------------------------------------------
-  // Live Telemetry Hook: Real-time turn recording into savings-ledger.jsonl
+  // Session UI Hook & Status Indicator
   // --------------------------------------------------------------------------
   if (typeof pi.on === "function") {
+    pi.on("session_start", async (_event: any, ctx: any) => {
+      try {
+        if (ctx?.hasUI && ctx?.ui?.setStatus) {
+          ctx.ui.setStatus(
+            "kobayashi",
+            "🏎️  Kobayashi Powertrain: Active | BM25 RAG: 0-Token Cold Starts | /roi"
+          );
+        }
+      } catch {}
+    });
+
+    // --------------------------------------------------------------------------
+    // Live Telemetry Hook: Real-time turn recording into savings-ledger.jsonl
+    // --------------------------------------------------------------------------
     pi.on("turn_end", async (event: any, ctx: any) => {
       try {
         const msg = event?.message;
@@ -569,6 +583,117 @@ export default function (pi: ExtensionAPI) {
       } catch {
         // Telemetry logging is completely isolated and never interrupts agent turns
       }
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Slash Commands: /roi, /stats, /dash, /virtual inside interactive Pi
+  // --------------------------------------------------------------------------
+  if (typeof pi.registerCommand === "function") {
+    const showRoi = async (_args: string, ctx: any) => {
+      try {
+        const ledgerPath = path.join(process.env.HOME || "", ".pi", "agent", "savings-ledger.jsonl");
+        let turns = 0;
+        let actual = 0;
+        let baseline = 0;
+        let tokens = 0;
+        let cached = 0;
+        let workhorseTurns = 0;
+
+        if (fs.existsSync(ledgerPath)) {
+          const lines = fs.readFileSync(ledgerPath, "utf8").trim().split("\n").filter(Boolean);
+          for (const l of lines) {
+            try {
+              const e = JSON.parse(l);
+              turns++;
+              actual += e.actualUsd || 0;
+              baseline += e.sonnetBaselineUsd || 0;
+              tokens += e.totalTokens || 0;
+              cached += e.cacheReadTokens || 0;
+              if (e.event === "workhorse" || (e.model && /ornith|qwen|ollama/i.test(e.model))) {
+                workhorseTurns++;
+              }
+            } catch {}
+          }
+        }
+
+        const saved = Math.max(0, baseline - actual);
+        const pct = baseline > 0 ? ((saved / baseline) * 100).toFixed(1) : "0.0";
+        const cachePct = tokens > 0 ? ((cached / tokens) * 100).toFixed(1) : "0.0";
+        const tokM = (tokens / 1_000_000).toFixed(2);
+
+        const summaryMsg =
+          `🏁 Kobayashi Scorecard: $${saved.toFixed(2)} Capital Saved (${pct}% Cost Reduction vs Claude Code) | ` +
+          `${tokM}M tokens (${cachePct}% cache reuse) across ${turns} turns (${workhorseTurns} turns on local RAM @ $0.00).`;
+
+        if (ctx?.ui?.notify) {
+          ctx.ui.notify(summaryMsg, "info");
+        }
+      } catch (err: any) {
+        if (ctx?.ui?.notify) ctx.ui.notify("Could not read telemetry: " + err.message, "error");
+      }
+    };
+
+    pi.registerCommand("roi", {
+      description: "Display Kobayashi Maru cumulative capital saved & token efficiency scorecard",
+      handler: showRoi,
+    });
+
+    pi.registerCommand("stats", {
+      description: "Display cumulative telemetry audit, token usage by tier, and capital saved",
+      handler: showRoi,
+    });
+
+    pi.registerCommand("dash", {
+      description: "Launch live executive telemetry web dashboard at http://127.0.0.1:4200",
+      handler: async (_args: string, ctx: any) => {
+        try {
+          const dashScript = path.join(process.env.HOME || "", ".pi", "agent", "exec-dashboard.mjs");
+          if (fs.existsSync(dashScript)) {
+            const { spawn, exec } = await import("child_process");
+            const child = spawn(process.execPath, [dashScript], { detached: true, stdio: "ignore" });
+            child.unref();
+            exec('open "http://127.0.0.1:4200"');
+            if (ctx?.ui?.notify) ctx.ui.notify("Executive dashboard opened at http://127.0.0.1:4200", "info");
+          } else {
+            if (ctx?.ui?.notify) ctx.ui.notify("Dashboard script not found at " + dashScript, "warning");
+          }
+        } catch (e: any) {
+          if (ctx?.ui?.notify) ctx.ui.notify("Failed to launch dashboard: " + e.message, "error");
+        }
+      },
+    });
+
+    pi.registerCommand("virtual", {
+      description: "List available native virtual models (e.g. auto/planner-worker, auto/bottom-up)",
+      handler: async (_args: string, ctx: any) => {
+        try {
+          const vConfigPath = path.join(process.env.HOME || "", ".pi", "agent", "virtual-models.json");
+          let models = ["auto/planner-worker (Planner -> Local Workhorse)", "auto/bottom-up ($0 Local Workhorse -> Planner)"];
+          if (fs.existsSync(vConfigPath)) {
+            const c = JSON.parse(fs.readFileSync(vConfigPath, "utf8"));
+            if (c.custom) {
+              for (const [id, m] of Object.entries(c.custom)) {
+                models.push(`auto/${id} (${(m as any).planner?.model} + ${(m as any).worker?.model})`);
+              }
+            }
+          }
+          if (ctx?.ui?.select) {
+            const picked = await ctx.ui.select("Active Virtual Models:", models);
+            if (picked) {
+              const modelId = picked.split(" ")[0];
+              if (ctx?.setModel) {
+                await ctx.setModel({ provider: "auto", id: modelId.replace("auto/", "") });
+                ctx.ui.notify(`Switched model to ${modelId}`, "info");
+              }
+            }
+          } else if (ctx?.ui?.notify) {
+            ctx.ui.notify("Virtual models: " + models.join(", "), "info");
+          }
+        } catch (e: any) {
+          if (ctx?.ui?.notify) ctx.ui.notify("Error: " + e.message, "error");
+        }
+      },
     });
   }
 }
