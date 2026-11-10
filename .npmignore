@@ -1,0 +1,5 @@
+test/
+eval/
+.github/
+*.tgz
+*.log

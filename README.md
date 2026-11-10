@@ -9,7 +9,8 @@
 [![Runtime: Pi](https://img.shields.io/badge/Runtime-Pi%20v1.4.0%2B-purple.svg)](https://github.com/earendil-works/pi)
 [![Compaction: NVIDIA SoL--Pi](https://img.shields.io/badge/Compaction-NVIDIA%20SoL--Pi-76B900.svg)](https://github.com/NVlabs/SoL-Pi)
 [![Topology: ast--grep](https://img.shields.io/badge/AST-ast--grep%20v0.51-orange.svg)](https://ast-grep.github.io/)
-[![Cost Reduction: -95.4%](https://img.shields.io/badge/Cost%20Reduction--95.4%25-brightgreen)](eval/BENCHMARK_RESULTS.md)
+[![Real-World Savings: -61.5%](https://img.shields.io/badge/Real--World%20Savings--61.5%25-brightgreen)](eval/BENCHMARK_RESULTS.md)
+[![Benchmark Peak: -95.4%](https://img.shields.io/badge/Benchmark%20Peak--95.4%25-success)](eval/BENCHMARK_RESULTS.md)
 [![Cold-Start Bloat: 0 Tokens](https://img.shields.io/badge/Cold--Start%20Bloat-0%20Tokens-success)](docs/SKILLS_GUIDE.md)
 [![Local Workhorse: $0.00 Compute](https://img.shields.io/badge/Local%20Workhorse-%240.00%20Compute-blueviolet)](docs/ARCHITECTURE.md#pillar-4-hybrid-powertrain--dual-virtual-model-router-bottom-up-routerts)
 
@@ -22,18 +23,34 @@
      Reprogramming the Token-Maxing Simulation
 ```
 
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ $ pi --model auto/planner-worker                                            │
+│ > Refactor auth middleware to support JWT refresh tokens & unit tests       │
+│                                                                             │
+│ 🔵 [Planner: GPT-5.6 / Sonnet] Formulating 3-step token refresh architecture │
+│ 🟢 [Worker: Local Ollama / $0.00] Applying AST-clean edits to src/auth.ts   │
+│ 🟢 [Worker: Local Ollama / $0.00] Running test suite (npm test)...          │
+│                                                                             │
+│ 📉 [Kobayashi Reducer] Elided 840 repetitive log lines -> 10-line receipt   │
+│ ✔ 34 tests passing (100%)                                                   │
+│                                                                             │
+│ 🏁 F1 SCORECARD: Turn Cost: $0.0024 | Saved vs Claude Code Baseline: $0.84 │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## ⚡ The 30-Second Overview
 
-Default coding agent harnesses dump 50+ to 500+ skills into every prompt, burn thousands of lines of compiler logs into context, and waste expensive frontier models on simple file edits and test runs.
+Default coding agent harnesses dump all installed skills into every prompt, burn thousands of lines of terminal compiler logs into context, and waste expensive frontier models ($15–$75/million tokens) on simple file edits and test runs.
 
 **Kobayashi Maru reprograms the simulation like Formula 1:**
-- **BM25 Skill-RAG**: Injects **0 skills on cold start**; mounts only the top 1–2 matched runbooks on demand (< 2ms in RAM).
-- **Dual Virtual Router**: **Frontier Planner** (Luna / Sonnet / R1) formulates architecture; **$0.00 Local Workhorse** (Ollama Ornith 1.5) executes tests and edits.
-- **NVIDIA SoL-Pi Compaction**: Evicts compiler dumps and test logs to disk while preserving crucial evidence.
-- **AST-grep Topology**: Maps 100k+ line codebases in **$< 800$ tokens** with zero hallucination loops.
-- **Fresh Laptop Ready**: Import custom skills and MCP servers from Git repos, Cursor, or Claude Desktop in seconds.
+- **Dual Virtual Router**: **Frontier Planner** (Luna / Sonnet / R1) formulates architecture; **$0.00 Local Workhorse** (Ollama Ornith 1.5) executes edits and tests.
+- **Evidence-Preserving Output Reducer**: Staged rule-based elision (citing NVIDIA SoL-Pi & arXiv:2609.20804) strips ANSI codes, flattens spinners, and truncates logs > 220 lines while preserving all error traces and exit codes. Saves 60–80% of tool output tokens.
+- **BM25 Skill-RAG**: Injects **0 skills on cold start**; mounts only top matched runbooks on demand (< 2ms in RAM). Pre-bundled with 38 engineering runbooks; scale-tested to 500+ skills.
+- **Verified Capital Arbitrage**: Measured **61.5% net cost reduction** across 1,300+ live developer sessions ($13.51 actual paid vs $35.07 Claude Code baseline) and up to **95.4%** on heavy log triage benchmarks.
+- **Fresh Laptop Ready**: 1-command installer sets up virtual routers, budget caps, and backward-compatible telemetry in 3 seconds.
 
 ---
 
