@@ -120,6 +120,12 @@ if [ -f "${SCRIPT_DIR}/vendor/extensions/handoff.ts" ]; then
   echo -e "  ✔ Deployed ${BOLD}handoff.ts${RESET} (/handoff lossless context transfer)"
 fi
 
+# Deploy Evidence-Preserving Output Reducer (ANSI/Progress bar noise elision)
+if [ -f "${SCRIPT_DIR}/vendor/extensions/evidence-reducer.ts" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/extensions/evidence-reducer.ts" "${EXTENSIONS_DIR}/evidence-reducer.ts"
+  echo -e "  ✔ Deployed ${BOLD}evidence-reducer.ts${RESET} (/reducer rule-based elision)"
+fi
+
 # Deploy Agent Profiles (scout, planner, reviewer, worker)
 mkdir -p "${PI_AGENT_DIR}/agents"
 if [ -d "${SCRIPT_DIR}/vendor/agents" ]; then
