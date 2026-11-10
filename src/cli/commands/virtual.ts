@@ -4,6 +4,7 @@ import chalk from "chalk";
 import { input, select, confirm } from "@inquirer/prompts";
 import { logger } from "../../utils/logger.js";
 import { loadVirtualModelConfig, CustomVirtualModelSpec } from "../../../bottom-up-router.js";
+import { checkOllama, discoverPiModels, DiscoveredModel } from "../../utils/system.js";
 
 const HOME = process.env.HOME || "";
 const CONFIG_PATH = path.join(HOME, ".pi", "agent", "virtual-models.json");
@@ -220,38 +221,59 @@ export async function virtualCommand(
 }
 
 /**
- * Interactive / direct model switcher
+ * Interactive / dynamic model switcher (discovers live available models with zero hardcoding)
  */
 export async function switchCommand(
   target?: string,
-  options: { direct?: boolean } = {}
+  _options: { direct?: boolean } = {}
 ): Promise<void> {
-  const CHOICES = [
-    { name: "auto/planner-worker [Hybrid] Luna Planner + Local RAM Workhorse ($0.00/turn)", value: "auto/planner-worker" },
-    { name: "auto/cursor-grok [Hybrid] Cursor Grok 4.6 Planner + Local RAM Workhorse", value: "auto/cursor-grok" },
-    { name: "auto/cursor-opus [Hybrid] Cursor Claude Opus 5 Planner + Local RAM Workhorse", value: "auto/cursor-opus" },
-    { name: "auto/cursor-sonnet [Hybrid] Cursor Claude Sonnet 5 Planner + Local RAM Workhorse", value: "auto/cursor-sonnet" },
-    { name: "auto/bottom-up [Hybrid] $0.00 Local RAM first -> Luna Escalation", value: "auto/bottom-up" },
-    { name: "cursor/grok-4.6 [Cursor] xAI Grok 4.6 (Frontier Coding & Math)", value: "cursor/grok-4.6" },
-    { name: "cursor/claude-opus-5 [Cursor] Anthropic Claude Opus 5 (Frontier Architecture)", value: "cursor/claude-opus-5" },
-    { name: "cursor/claude-sonnet-5 [Cursor] Anthropic Claude Sonnet 5 (Fast Frontier)", value: "cursor/claude-sonnet-5" },
-    { name: "cursor/default [Cursor] Cursor Default", value: "cursor/default" },
-    { name: "bedrock-mantle/openai.gpt-5.6-luna [Cloud] 14x Cheaper Cached Cloud", value: "bedrock-mantle/openai.gpt-5.6-luna" },
-    { name: "ollama/ornith-1.5:ctx [Local] 100% Private Local RAM ($0.00)", value: "ollama/ornith-1.5:ctx" },
-  ];
+  const discovered = discoverPiModels();
+  const allChoices: { name: string; value: string }[] = [];
+
+  // 1. Virtual models from virtual-models.json
+  allChoices.push({ name: "auto/planner-worker [Hybrid] (Planner -> Local RAM Workhorse)", value: "auto/planner-worker" });
+  allChoices.push({ name: "auto/bottom-up [Hybrid] ($0 Local RAM first -> Planner Escalator)", value: "auto/bottom-up" });
+
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      const c = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+      if (c.custom && typeof c.custom === "object") {
+        for (const [id, spec] of Object.entries(c.custom)) {
+          allChoices.push({ name: `auto/${id} [Custom Virtual] (${(spec as any).name || id})`, value: `auto/${id}` });
+        }
+      }
+    }
+  } catch {}
+
+  // 2. Dynamically discovered live models from active providers
+  for (const m of discovered) {
+    const fullId = `${m.provider}/${m.id}`;
+    if (!allChoices.some(c => c.value === fullId)) {
+      allChoices.push({
+        name: `${fullId} [${m.provider}] (${m.context || ""} ctx)`,
+        value: fullId,
+      });
+    }
+  }
 
   let selected = target?.trim();
   if (selected) {
-    const lower = selected.toLowerCase();
-    if (lower === "grok" || lower === "cursor-grok") selected = options.direct ? "cursor/grok-4.6" : "auto/cursor-grok";
-    else if (lower === "opus" || lower === "cursor-opus") selected = options.direct ? "cursor/claude-opus-5" : "auto/cursor-opus";
-    else if (lower === "sonnet" || lower === "cursor-sonnet") selected = options.direct ? "cursor/claude-sonnet-5" : "auto/cursor-sonnet";
-    else if (lower === "luna" || lower === "planner" || lower === "virtual") selected = "auto/planner-worker";
-    else if (lower === "local" || lower === "bottom-up") selected = "auto/bottom-up";
+    const q = selected.toLowerCase();
+    const match = allChoices.find(c =>
+      c.value.toLowerCase().includes(q) ||
+      c.name.toLowerCase().includes(q) ||
+      (q === "virtual" && c.value.startsWith("auto/"))
+    );
+    if (match) {
+      selected = match.value;
+    } else {
+      logger.error(`No available model found matching "${target}". Run 'kobayashi switch' without args to browse.`);
+      return;
+    }
   } else {
     selected = await select({
-      message: "Select Default Model / Virtual Powertrain:",
-      choices: CHOICES,
+      message: "Select Active Model / Virtual Powertrain:",
+      choices: allChoices,
     });
   }
 
@@ -262,7 +284,7 @@ export async function switchCommand(
 
     let settings: any = {};
     if (fs.existsSync(SETTINGS_PATH)) {
-      settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
+      try { settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8")); } catch {}
     }
     settings.defaultProvider = provider;
     settings.defaultModel = id;

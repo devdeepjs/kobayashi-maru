@@ -704,38 +704,57 @@ export default function (pi: ExtensionAPI) {
 
     pi.registerCommand("virtual", {
       description: "Select and switch between active virtual model routers",
-      handler: async (_args: string, ctx: any) => {
+      handler: async (args: string, ctx: any) => {
         try {
           const vConfigPath = path.join(process.env.HOME || "", ".pi", "agent", "virtual-models.json");
-          let models = [
-            "auto/planner-worker (Cached Luna Planner + Local RAM Workhorse)",
-            "auto/cursor-grok (Cursor Grok 4.6 Planner + Local RAM Workhorse)",
-            "auto/cursor-opus (Cursor Claude Opus 5 Planner + Local RAM Workhorse)",
-            "auto/cursor-sonnet (Cursor Claude Sonnet 5 Planner + Local RAM Workhorse)",
-            "auto/bottom-up ($0 Local Workhorse -> Luna on Failure)",
+          let virtualModels: { id: string; label: string }[] = [
+            { id: "auto/planner-worker", label: "auto/planner-worker (Planner -> Local RAM Workhorse)" },
+            { id: "auto/bottom-up", label: "auto/bottom-up ($0 Local Workhorse -> Planner Escalation)" },
           ];
+
           if (fs.existsSync(vConfigPath)) {
-            const c = JSON.parse(fs.readFileSync(vConfigPath, "utf8"));
-            if (c.custom) {
-              for (const [id, m] of Object.entries(c.custom)) {
-                const entryName = `auto/${id} (${(m as any).planner?.model || (m as any).planner} + ${(m as any).worker?.model || (m as any).worker})`;
-                if (!models.some(item => item.startsWith(`auto/${id} `))) {
-                  models.push(entryName);
+            try {
+              const c = JSON.parse(fs.readFileSync(vConfigPath, "utf8"));
+              if (c.custom && typeof c.custom === "object") {
+                for (const [id, m] of Object.entries(c.custom)) {
+                  const spec = m as any;
+                  const pModel = spec.planner?.model || (typeof spec.planner === "string" ? spec.planner : "planner");
+                  const wModel = spec.worker?.model || (typeof spec.worker === "string" ? spec.worker : "worker");
+                  virtualModels.push({
+                    id: `auto/${id}`,
+                    label: `auto/${id} (${spec.name || `${pModel} + ${wModel}`})`,
+                  });
                 }
               }
+            } catch {}
+          }
+
+          const query = args?.trim().toLowerCase();
+          if (query) {
+            const match = virtualModels.find(v => v.id.toLowerCase().includes(query) || v.label.toLowerCase().includes(query));
+            if (match) {
+              const cleanId = match.id.replace("auto/", "");
+              if (ctx?.setModel) {
+                await ctx.setModel({ provider: "auto", id: cleanId });
+                if (ctx?.ui?.notify) ctx.ui.notify(`🏎️ Switched to virtual model: ${match.id}`, "info");
+              }
+              return;
             }
           }
+
           if (ctx?.ui?.select) {
-            const picked = await ctx.ui.select("Active Virtual Models:", models);
+            const choices = virtualModels.map(v => v.label);
+            const picked = await ctx.ui.select("Active Virtual Models:", choices);
             if (picked) {
               const modelId = picked.split(" ")[0];
+              const cleanId = modelId.replace("auto/", "");
               if (ctx?.setModel) {
-                await ctx.setModel({ provider: "auto", id: modelId.replace("auto/", "") });
-                ctx.ui.notify(`🏎️ Switched model to ${modelId}`, "info");
+                await ctx.setModel({ provider: "auto", id: cleanId });
+                if (ctx?.ui?.notify) ctx.ui.notify(`🏎️ Switched to virtual model: ${modelId}`, "info");
               }
             }
           } else if (ctx?.ui?.notify) {
-            ctx.ui.notify("Virtual models: " + models.join(", "), "info");
+            ctx.ui.notify("Virtual models: " + virtualModels.map(v => v.id).join(", "), "info");
           }
         } catch (e: any) {
           if (ctx?.ui?.notify) ctx.ui.notify("Error: " + e.message, "error");
@@ -744,36 +763,75 @@ export default function (pi: ExtensionAPI) {
     });
 
     pi.registerCommand("switch", {
-      description: "Quick-switch between Virtual, Cursor (Grok, Opus, Sonnet), and Local models",
-      handler: async (_args: string, ctx: any) => {
+      description: "Quick-switch model by keyword (e.g. /switch grok, /switch opus, /switch luna) or open dynamic picker",
+      handler: async (args: string, ctx: any) => {
         try {
-          const quickChoices = [
-            "auto/planner-worker [Hybrid] Luna Planner + Local RAM Workhorse ($0.00/turn)",
-            "auto/cursor-grok [Hybrid] Cursor Grok 4.6 Planner + Local RAM Workhorse",
-            "auto/cursor-opus [Hybrid] Cursor Claude Opus 5 Planner + Local RAM Workhorse",
-            "auto/bottom-up [Hybrid] $0.00 Local RAM first -> Luna Escalation",
-            "cursor/grok-4.6 [Cursor] xAI Grok 4.6 (Frontier Coding & Math)",
-            "cursor/claude-opus-5 [Cursor] Anthropic Claude Opus 5 (Frontier Architecture)",
-            "cursor/claude-sonnet-5 [Cursor] Anthropic Claude Sonnet 5 (Fast Frontier)",
-            "cursor/default [Cursor] Cursor Default",
-            "bedrock-mantle/openai.gpt-5.6-luna [Cloud] 14x Cheaper Cached Cloud",
-            "ollama/ornith-1.5:ctx [Local] 100% Private Local RAM ($0.00)",
-          ];
+          let availableModels: { provider: string; id: string; name?: string }[] = [];
 
-          if (ctx?.ui?.select) {
-            const picked = await ctx.ui.select("Select Model / Powertrain:", quickChoices);
+          if (ctx?.modelRegistry?.getAvailable) {
+            try {
+              const live = await ctx.modelRegistry.getAvailable();
+              if (Array.isArray(live)) {
+                availableModels = live.map((m: any) => ({
+                  provider: m.provider,
+                  id: m.id,
+                  name: m.name || m.id,
+                }));
+              }
+            } catch {}
+          }
+
+          // Also include virtual models
+          const vConfigPath = path.join(process.env.HOME || "", ".pi", "agent", "virtual-models.json");
+          const vList = ["auto/planner-worker", "auto/bottom-up"];
+          if (fs.existsSync(vConfigPath)) {
+            try {
+              const c = JSON.parse(fs.readFileSync(vConfigPath, "utf8"));
+              if (c.custom && typeof c.custom === "object") {
+                for (const id of Object.keys(c.custom)) {
+                  vList.push(`auto/${id}`);
+                }
+              }
+            } catch {}
+          }
+
+          for (const v of vList) {
+            const parts = v.split("/");
+            availableModels.unshift({ provider: parts[0], id: parts[1], name: `Virtual Router: ${v}` });
+          }
+
+          const query = args?.trim().toLowerCase();
+          if (query) {
+            const match = availableModels.find(
+              m => m.id.toLowerCase().includes(query) ||
+                   m.provider.toLowerCase().includes(query) ||
+                   `${m.provider}/${m.id}`.toLowerCase().includes(query) ||
+                   (m.name && m.name.toLowerCase().includes(query))
+            );
+            if (match) {
+              if (ctx?.setModel) {
+                await ctx.setModel({ provider: match.provider, id: match.id });
+                if (ctx?.ui?.notify) ctx.ui.notify(`✔ Switched model to ${match.provider}/${match.id}`, "info");
+              }
+              return;
+            } else {
+              if (ctx?.ui?.notify) ctx.ui.notify(`No available model found matching "${query}"`, "warning");
+              return;
+            }
+          }
+
+          if (ctx?.ui?.select && availableModels.length > 0) {
+            const choices = availableModels.map(m => `${m.provider}/${m.id}${m.name && m.name !== m.id ? ` (${m.name})` : ""}`);
+            const picked = await ctx.ui.select("Select Available Model:", choices);
             if (picked) {
               const fullSpec = picked.split(" ")[0];
-              const parts = fullSpec.split("/");
-              const provider = parts[0];
-              const id = parts.slice(1).join("/");
+              const [p, ...rest] = fullSpec.split("/");
+              const id = rest.join("/");
               if (ctx?.setModel) {
-                await ctx.setModel({ provider, id });
-                ctx.ui.notify(`✔ Switched model to ${fullSpec}`, "info");
+                await ctx.setModel({ provider: p, id });
+                if (ctx?.ui?.notify) ctx.ui.notify(`✔ Switched model to ${fullSpec}`, "info");
               }
             }
-          } else if (ctx?.ui?.notify) {
-            ctx.ui.notify("Quick models: " + quickChoices.map(c => c.split(" ")[0]).join(", "), "info");
           }
         } catch (e: any) {
           if (ctx?.ui?.notify) ctx.ui.notify("Switch error: " + e.message, "error");

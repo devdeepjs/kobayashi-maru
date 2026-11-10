@@ -177,21 +177,9 @@ for (const ext of desiredExts) {
 settings.extensions = currentExts;
 
 // Configure enabledModels for instant Ctrl+P cycle (incorporating Cursor as non-default sniper)
-if (!settings.enabledModels || !Array.isArray(settings.enabledModels)) {
-  settings.enabledModels = [
-    'auto/planner-worker',
-    'auto/bottom-up',
-    'bedrock-mantle/openai.gpt-5.6-luna',
-    'ollama/ornith-1.5:ctx',
-    'amazon-bedrock/us.anthropic.claude-sonnet-5-5',
-    'cursor/claude-opus-5'
-  ];
-}
-
 fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 console.log('  ✔ Configured defaultModel: ' + settings.defaultModel);
 console.log('  ✔ Enabled streaming prompt cache warming');
-console.log('  ✔ Configured enabledModels for Ctrl+P cycle (with Cursor sniper tier)');
 "
 
 # Enforce Cursor-to-Pi $20 budget cap in shell profile
