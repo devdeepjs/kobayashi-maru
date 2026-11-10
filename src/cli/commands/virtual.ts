@@ -218,3 +218,58 @@ export async function virtualCommand(
     makeDefault: options.default,
   });
 }
+
+/**
+ * Interactive / direct model switcher
+ */
+export async function switchCommand(
+  target?: string,
+  options: { direct?: boolean } = {}
+): Promise<void> {
+  const CHOICES = [
+    { name: "auto/planner-worker [Hybrid] Luna Planner + Local RAM Workhorse ($0.00/turn)", value: "auto/planner-worker" },
+    { name: "auto/cursor-grok [Hybrid] Cursor Grok 4.6 Planner + Local RAM Workhorse", value: "auto/cursor-grok" },
+    { name: "auto/cursor-opus [Hybrid] Cursor Claude Opus 5 Planner + Local RAM Workhorse", value: "auto/cursor-opus" },
+    { name: "auto/cursor-sonnet [Hybrid] Cursor Claude Sonnet 5 Planner + Local RAM Workhorse", value: "auto/cursor-sonnet" },
+    { name: "auto/bottom-up [Hybrid] $0.00 Local RAM first -> Luna Escalation", value: "auto/bottom-up" },
+    { name: "cursor/grok-4.6 [Cursor] xAI Grok 4.6 (Frontier Coding & Math)", value: "cursor/grok-4.6" },
+    { name: "cursor/claude-opus-5 [Cursor] Anthropic Claude Opus 5 (Frontier Architecture)", value: "cursor/claude-opus-5" },
+    { name: "cursor/claude-sonnet-5 [Cursor] Anthropic Claude Sonnet 5 (Fast Frontier)", value: "cursor/claude-sonnet-5" },
+    { name: "cursor/default [Cursor] Cursor Default", value: "cursor/default" },
+    { name: "bedrock-mantle/openai.gpt-5.6-luna [Cloud] 14x Cheaper Cached Cloud", value: "bedrock-mantle/openai.gpt-5.6-luna" },
+    { name: "ollama/ornith-1.5:ctx [Local] 100% Private Local RAM ($0.00)", value: "ollama/ornith-1.5:ctx" },
+  ];
+
+  let selected = target?.trim();
+  if (selected) {
+    const lower = selected.toLowerCase();
+    if (lower === "grok" || lower === "cursor-grok") selected = options.direct ? "cursor/grok-4.6" : "auto/cursor-grok";
+    else if (lower === "opus" || lower === "cursor-opus") selected = options.direct ? "cursor/claude-opus-5" : "auto/cursor-opus";
+    else if (lower === "sonnet" || lower === "cursor-sonnet") selected = options.direct ? "cursor/claude-sonnet-5" : "auto/cursor-sonnet";
+    else if (lower === "luna" || lower === "planner" || lower === "virtual") selected = "auto/planner-worker";
+    else if (lower === "local" || lower === "bottom-up") selected = "auto/bottom-up";
+  } else {
+    selected = await select({
+      message: "Select Default Model / Virtual Powertrain:",
+      choices: CHOICES,
+    });
+  }
+
+  try {
+    const parts = selected.split("/");
+    const provider = parts[0];
+    const id = parts.slice(1).join("/");
+
+    let settings: any = {};
+    if (fs.existsSync(SETTINGS_PATH)) {
+      settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
+    }
+    settings.defaultProvider = provider;
+    settings.defaultModel = id;
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+    logger.success(`Default model set to ${chalk.bold.green(selected)} in ~/.pi/agent/settings.json`);
+    console.log(chalk.dim(`  Run: pi`));
+  } catch (err: any) {
+    logger.error(`Failed to update settings: ${err.message}`);
+  }
+}

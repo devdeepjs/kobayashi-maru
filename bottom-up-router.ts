@@ -703,16 +703,25 @@ export default function (pi: ExtensionAPI) {
     });
 
     pi.registerCommand("virtual", {
-      description: "List available native virtual models (e.g. auto/planner-worker, auto/bottom-up)",
+      description: "Select and switch between active virtual model routers",
       handler: async (_args: string, ctx: any) => {
         try {
           const vConfigPath = path.join(process.env.HOME || "", ".pi", "agent", "virtual-models.json");
-          let models = ["auto/planner-worker (Planner -> Local Workhorse)", "auto/bottom-up ($0 Local Workhorse -> Planner)"];
+          let models = [
+            "auto/planner-worker (Cached Luna Planner + Local RAM Workhorse)",
+            "auto/cursor-grok (Cursor Grok 4.6 Planner + Local RAM Workhorse)",
+            "auto/cursor-opus (Cursor Claude Opus 5 Planner + Local RAM Workhorse)",
+            "auto/cursor-sonnet (Cursor Claude Sonnet 5 Planner + Local RAM Workhorse)",
+            "auto/bottom-up ($0 Local Workhorse -> Luna on Failure)",
+          ];
           if (fs.existsSync(vConfigPath)) {
             const c = JSON.parse(fs.readFileSync(vConfigPath, "utf8"));
             if (c.custom) {
               for (const [id, m] of Object.entries(c.custom)) {
-                models.push(`auto/${id} (${(m as any).planner?.model} + ${(m as any).worker?.model})`);
+                const entryName = `auto/${id} (${(m as any).planner?.model || (m as any).planner} + ${(m as any).worker?.model || (m as any).worker})`;
+                if (!models.some(item => item.startsWith(`auto/${id} `))) {
+                  models.push(entryName);
+                }
               }
             }
           }
@@ -722,7 +731,7 @@ export default function (pi: ExtensionAPI) {
               const modelId = picked.split(" ")[0];
               if (ctx?.setModel) {
                 await ctx.setModel({ provider: "auto", id: modelId.replace("auto/", "") });
-                ctx.ui.notify(`Switched model to ${modelId}`, "info");
+                ctx.ui.notify(`🏎️ Switched model to ${modelId}`, "info");
               }
             }
           } else if (ctx?.ui?.notify) {
@@ -730,6 +739,44 @@ export default function (pi: ExtensionAPI) {
           }
         } catch (e: any) {
           if (ctx?.ui?.notify) ctx.ui.notify("Error: " + e.message, "error");
+        }
+      },
+    });
+
+    pi.registerCommand("switch", {
+      description: "Quick-switch between Virtual, Cursor (Grok, Opus, Sonnet), and Local models",
+      handler: async (_args: string, ctx: any) => {
+        try {
+          const quickChoices = [
+            "auto/planner-worker [Hybrid] Luna Planner + Local RAM Workhorse ($0.00/turn)",
+            "auto/cursor-grok [Hybrid] Cursor Grok 4.6 Planner + Local RAM Workhorse",
+            "auto/cursor-opus [Hybrid] Cursor Claude Opus 5 Planner + Local RAM Workhorse",
+            "auto/bottom-up [Hybrid] $0.00 Local RAM first -> Luna Escalation",
+            "cursor/grok-4.6 [Cursor] xAI Grok 4.6 (Frontier Coding & Math)",
+            "cursor/claude-opus-5 [Cursor] Anthropic Claude Opus 5 (Frontier Architecture)",
+            "cursor/claude-sonnet-5 [Cursor] Anthropic Claude Sonnet 5 (Fast Frontier)",
+            "cursor/default [Cursor] Cursor Default",
+            "bedrock-mantle/openai.gpt-5.6-luna [Cloud] 14x Cheaper Cached Cloud",
+            "ollama/ornith-1.5:ctx [Local] 100% Private Local RAM ($0.00)",
+          ];
+
+          if (ctx?.ui?.select) {
+            const picked = await ctx.ui.select("Select Model / Powertrain:", quickChoices);
+            if (picked) {
+              const fullSpec = picked.split(" ")[0];
+              const parts = fullSpec.split("/");
+              const provider = parts[0];
+              const id = parts.slice(1).join("/");
+              if (ctx?.setModel) {
+                await ctx.setModel({ provider, id });
+                ctx.ui.notify(`✔ Switched model to ${fullSpec}`, "info");
+              }
+            }
+          } else if (ctx?.ui?.notify) {
+            ctx.ui.notify("Quick models: " + quickChoices.map(c => c.split(" ")[0]).join(", "), "info");
+          }
+        } catch (e: any) {
+          if (ctx?.ui?.notify) ctx.ui.notify("Switch error: " + e.message, "error");
         }
       },
     });

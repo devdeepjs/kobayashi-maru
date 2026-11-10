@@ -10,7 +10,7 @@ import { configCommand, setNameCommand } from "../src/cli/commands/config.js";
 import { statsCommand } from "../src/cli/commands/stats.js";
 import { evalCommand } from "../src/cli/commands/eval.js";
 import { mcpCommand } from "../src/cli/commands/mcp.js";
-import { virtualCommand } from "../src/cli/commands/virtual.js";
+import { virtualCommand, switchCommand } from "../src/cli/commands/virtual.js";
 
 const program = new Command();
 
@@ -131,5 +131,11 @@ program
   .command("set-name [name]")
   .description("Set your name so Pi addresses you personally in every session (stored in virtual-models.json, reads KOBAYASHI_USER env as override)")
   .action(setNameCommand);
+
+program
+  .command("switch [target]")
+  .description("Seamlessly switch active model (e.g. grok, opus, sonnet, luna, local, or interactive)")
+  .option("-d, --direct", "Switch to direct provider model instead of hybrid virtual model")
+  .action(switchCommand);
 
 program.parse(process.argv);
