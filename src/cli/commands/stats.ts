@@ -452,7 +452,7 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
     headerTitle.length
   );
   const badgeActive = " HARNESS: ACTIVE ";
-  const badgeVec = " 10-VEC INSPECTOR ";
+  const badgeVec = " BM25 SKILL-RAG ";
   const badgeSpill = " SPILL: 1.5K ";
   const badgeRouted = " 3-TIER ROUTED ";
   const badgeLineLen = badgeActive.length + 1 + badgeVec.length + 1 + badgeSpill.length + 1 + badgeRouted.length;
@@ -489,7 +489,7 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
   );
 
   const aerLine = `Cache Acceleration: `;
-  const aerVal = `${cacheHitRate}% Cache Hit Rate (${totalCacheReadTokens.toLocaleString()} tokens reused @ $0.02/M)`;
+  const aerVal = `${cacheHitRate}% Cache Hit Rate (${totalCacheReadTokens.toLocaleString("en-US")} tokens reused @ $0.02/M)`;
   printCardLine(
     "#38bdf8",
     chalk.bold(aerLine) + chalk.bold.hex("#38bdf8")(aerVal),
@@ -520,7 +520,7 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
   const s3 = `• Electric Workhorse (Ollama)   : ${tierStats.workhorse.turns} turns offloaded to RAM at $0.00 (Saved +$${tierStats.workhorse.baselineUsd.toFixed(4)})`;
   printCardLine("#10b981", chalk.hex("#34d399")(s3), s3.length);
 
-  const s4 = `• KV Prompt Cache Reuse         : ${totalCacheReadTokens.toLocaleString()} tokens billed at $0.02/M instead of $3.00/M`;
+  const s4 = `• KV Prompt Cache Reuse         : ${totalCacheReadTokens.toLocaleString("en-US")} tokens billed at $0.02/M instead of $3.00/M`;
   printCardLine("#10b981", chalk.hex("#34d399")(s4), s4.length);
 
   printCardEmpty("#10b981");
@@ -608,9 +608,9 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
   printCardEmpty("#38bdf8");
 
   const tok1Left = "Total Processed Tokens: ";
-  const tok1Val = totalTokens.toLocaleString().padEnd(14);
+  const tok1Val = totalTokens.toLocaleString("en-US").padEnd(14);
   const tok1Mid = "Cache Read Tokens : ";
-  const tok1Read = totalCacheReadTokens.toLocaleString().padEnd(13);
+  const tok1Read = totalCacheReadTokens.toLocaleString("en-US").padEnd(13);
   printCardLine(
     "#38bdf8",
     chalk.bold(tok1Left) +
@@ -621,9 +621,9 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
   );
 
   const tok2Left = "Fresh Input Tokens    : ";
-  const tok2Val = totalInputTokens.toLocaleString().padEnd(14);
+  const tok2Val = totalInputTokens.toLocaleString("en-US").padEnd(14);
   const tok2Mid = "Output Tokens     : ";
-  const tok2Out = totalOutputTokens.toLocaleString().padEnd(13);
+  const tok2Out = totalOutputTokens.toLocaleString("en-US").padEnd(13);
   printCardLine(
     "#38bdf8",
     chalk.bold(tok2Left) +
@@ -633,7 +633,7 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
     tok2Left.length + tok2Val.length + tok2Mid.length + tok2Out.length
   );
 
-  const cacheNote = `Cache Read Advantage : ${totalCacheReadTokens.toLocaleString()} tokens billed @ $0.02/M ($0.008 total)`;
+  const cacheNote = `Cache Read Advantage : ${totalCacheReadTokens.toLocaleString("en-US")} tokens billed @ $0.02/M ($0.008 total)`;
   printCardLine(
     "#38bdf8",
     chalk.dim(cacheNote),
@@ -660,7 +660,7 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
     const saved = Math.max(0, s.baselineUsd - s.actualUsd);
     const n = name.padEnd(20);
     const trn = String(s.turns).padStart(5);
-    const tk = s.tokens.toLocaleString().padStart(8);
+    const tk = s.tokens.toLocaleString("en-US").padStart(10);
     const act = (`$` + s.actualUsd.toFixed(4)).padStart(10);
     const base = (`$` + s.baselineUsd.toFixed(4)).padStart(11);
     const sv = (`+$` + saved.toFixed(4)).padStart(10);
@@ -744,7 +744,7 @@ export async function statsCommand(options: { web?: boolean; json?: boolean }): 
   printCardHeader("#f59e0b", "HARNESS INTERCEPTION & TOKEN DEFENSE");
   printCardEmpty("#f59e0b");
 
-  const int1 = "• 10-Vector Bulk Reads Blocked  : ";
+  const int1 = "• Heavy Tool Reads Intercepted  : ";
   const int1Val = String(delegationEnforcedCount).padEnd(6);
   const int1Note = "Intercepted & routed to local workhorse";
   printCardLine(

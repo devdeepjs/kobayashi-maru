@@ -25,7 +25,7 @@ Key architectural mechanisms:
 3. BM25 Skill-RAG: 0 skills dumped on cold start. It indexes runbooks in memory (< 2ms) and injects only the top 1-2 matching runbooks dynamically.
 4. Blast-Radius Protection: Safe guardrails blocking direct writes to .env*, .git/, and credentials.
 
-Across 1,300+ live assistant sessions on our real engineering workloads, we measured a 61.5% net cost reduction ($13.51 actual spent vs $35.07 Claude Code baseline), and up to 95.4% reduction on heavy log-triage benchmarks.
+Across 1,306 live assistant turns across 128 real engineering sessions, we measured a 61.5% net cost reduction ($13.51 actual spent vs $35.07 Claude Code baseline), and up to 95.4% reduction on heavy log-triage benchmarks.
 
 Setup is 1 command (non-destructive on existing Pi installs, preserving all API keys):
 curl -fsSL https://raw.githubusercontent.com/devdeepjs/kobayashi-maru/main/install.sh | bash

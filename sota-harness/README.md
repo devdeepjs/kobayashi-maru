@@ -26,7 +26,7 @@
 
 ## ⚡ The 30-Second Overview
 
-Default coding agent harnesses dump 50+ to 500+ skills into every prompt, burn thousands of lines of compiler logs into context, and waste expensive frontier models on simple file edits and test runs.
+Default coding agent harnesses dump 50+ to 38 engineering skills into every prompt, burn thousands of lines of compiler logs into context, and waste expensive frontier models on simple file edits and test runs.
 
 **Kobayashi Maru reprograms the simulation like Formula 1:**
 - **BM25 Skill-RAG**: Injects **0 skills on cold start**; mounts only the top 1–2 matched runbooks on demand (< 2ms in RAM).
@@ -148,7 +148,7 @@ pi --model auto/speed-demon    # Run your custom virtual router
 
 Detailed architectural specifications are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md):
 
-1. **Active Aerodynamics — BM25 Skill-RAG (`skill-rag.ts`)**: In-memory retrieval across 500+ skills; 0 cold-start tokens.
+1. **Active Aerodynamics — BM25 Skill-RAG (`skill-rag.ts`)**: In-memory retrieval across 38 engineering skills; 0 cold-start tokens.
 2. **Lean Chassis — Minimal Tool Seam**: Prunes passive tools from prompt schemas; context-gates web tools.
 3. **Telemetry & Downforce — NVIDIA SoL-Pi Compaction (`sol-pi.json`)**: Chained tool merging, observation log eviction to disk, and prompt cache hygiene.
 4. **Hybrid Powertrain — Dual Virtual Model Router (`bottom-up-router.ts`)**: Seamless orchestration across any planner and worker model.

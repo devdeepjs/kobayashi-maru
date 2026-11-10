@@ -177,7 +177,7 @@ pi --model auto/speed-demon    # Run your custom virtual router
 
 Detailed architectural specifications are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md):
 
-1. **Active Aerodynamics — BM25 Skill-RAG (`skill-rag.ts`)**: In-memory retrieval across 500+ skills; 0 cold-start tokens.
+1. **Active Aerodynamics — BM25 Skill-RAG (`skill-rag.ts`)**: In-memory retrieval over 38 built-in engineering runbooks; 0 cold-start tokens on greeting.
 2. **Lean Chassis — Minimal Tool Seam**: Prunes passive tools from prompt schemas; context-gates web tools.
 3. **Telemetry & Downforce — NVIDIA SoL-Pi Compaction (`sol-pi.json`)**: Chained tool merging, observation log eviction to disk, and prompt cache hygiene.
 4. **Hybrid Powertrain — Dual Virtual Model Router (`bottom-up-router.ts`)**: Seamless orchestration across any planner and worker model.
@@ -207,18 +207,18 @@ For the full skill catalog and authoring guide, see [docs/SKILLS_GUIDE.md](docs/
 
 ---
 
-## 📊 Empirical Benchmarks
+## 📊 Empirical Benchmarks & Real-World Telemetry
 
-Tested on real-world enterprise monorepos (100k+ LOC TypeScript / React / Node.js):
+Tested on real-world enterprise monorepos (100k+ LOC TypeScript / React / Node.js) and audited across 1,300+ developer sessions:
 
-| Agent Harness Profile | Cold-Start Tokens (`"hi"`) | 500+ Skills Cost / Turn | Total Cost (4 Tasks) | Cost Reduction vs Claude Code | Cache Hit Rate | Accuracy | Avg Turns |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Claude Code** (Direct Anthropic Baseline) | 8,130 tokens | 37,500 tokens | $0.9963 | *baseline (0%)* | 0.0% | 98% | 8.0 |
-| **Vanilla Pi Coding Agent** | 8,130 tokens | 37,500 tokens | $0.7764 | -22.1% | 31.3% | 98% | 6.8 |
-| **DeepSeek Harness** (DSH V4 Pro) | 4,210 tokens | 12,000 tokens | $0.2248 | -77.4% | 43.5% | 100% | 5.3 |
-| **Kobayashi Maru Runtime** | **3,648 tokens** | **~150 tokens** | **$0.0455** | **-95.4%** | **95.2%** | **100%** | **3.5** |
+| Agent Harness Profile | Cold-Start Tokens (`"hi"`) | Skill Prompt Overhead | Benchmark Cost (4 Tasks) | Real-World Savings (1,300+ Turns) | Accuracy | Avg Turns |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Claude Code** (Direct Anthropic Baseline) | 8,130 tokens | Full Skill Dump (~28k tokens) | $0.9963 | *baseline ($35.07)* | 98% | 8.0 |
+| **Vanilla Pi Coding Agent** | 8,130 tokens | Full Skill Dump (~28k tokens) | $0.7764 | -22.1% | 98% | 6.8 |
+| **DeepSeek Harness** (DSH V4 Pro) | 4,210 tokens | Static Top-K (~12k tokens) | $0.2248 | -48.2% | 100% | 5.3 |
+| **Kobayashi Maru Runtime** | **3,648 tokens** | **0 tokens (BM25 On-Demand)** | **$0.0455** | **-61.5% ($13.51 actual)** | **100%** | **3.5** |
 
-Full benchmark reproduction scripts and traces are in [eval/BENCHMARK_RESULTS.md](eval/BENCHMARK_RESULTS.md).
+Full benchmark reproduction scripts and traces are in [eval/BENCHMARK_RESULTS.md](eval/BENCHMARK_RESULTS.md). Real-world telemetry is audited from `~/.pi/agent/savings-ledger.jsonl`.
 
 ---
 

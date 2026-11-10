@@ -7,7 +7,7 @@
 # Production-grade setup wizard for executives, tech leads, and developers:
 # 1. Interactive Provider Selection (Bedrock Mantle, Direct Bedrock, Claude, OpenAI, Local Ollama, Cursor/Proxy)
 # 2. Bundled Matt Pocock 38-Skill Suite Synchronization (~/.agents/skills)
-# 3. SRA Skill-RAG (Okapi BM25 Dynamic Capability Retrieval for 500+ skills)
+# 3. SRA Skill-RAG (Okapi BM25 Dynamic Capability Retrieval for 38+ engineering skills)
 # 4. Minimal Tool Seam (Lean active toolloadout, zero prompt bloat)
 # 5. NVIDIA SoL-Pi (Observation Compaction & Online Context Pruning)
 # 6. Dual Virtual Model Router (Frontier Planner + $0 Local Workhorse, any model customizable)
@@ -708,7 +708,7 @@ if [ "$EXTENSIONS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
 
   SKILL_COUNT=$(find "${SKILLS_DIR}" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
   echo -e "  ✔ Synchronized: ${GREEN}${SKILL_COUNT} skills${RESET} globally indexed in ${SKILLS_DIR}"
-  echo -e "  ✔ Okapi BM25 RAG: 0 tokens on Turn 1 cold starts (vs ~37,500 in static dump)"
+  echo -e "  ✔ Okapi BM25 RAG: 0 tokens on Turn 1 cold starts (vs ~28,500 in static dump)"
 fi
 
 if [ "$SKILLS_ONLY" = true ]; then

@@ -105,9 +105,9 @@ export function findSkillFiles(dir: string, depth = 0, maxDepth = 3): string[] {
 /**
  * F1 SRA Engine (Skill Retrieval Augmentation & Minimal Tool Seam)
  * 
- * 1. Supports 500+ skills in memory via BM25 (< 2ms index latency).
+ * 1. Supports in-memory dynamic skill indexing via BM25 (< 2ms latency).
  * 2. On turn start (before_agent_start):
- *    - Injects 0 skills on greetings or generic tasks (saving 3,000 to 35,000 tokens).
+ *    - Injects 0 skills on greetings or generic tasks (saving 3,000 to 28,000 tokens).
  *    - Injects ONLY the top 1-2 matched skills when a task specifically calls for them.
  *    - Implements Dynamic Tool Seam: keeps passive meta/web tools out of prompt unless requested.
  * 3. Registers `find_skill` (with both execute & handler for Pi 1.4+ compatibility)
@@ -290,7 +290,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "find_skill",
     label: "Search & Mount Skills from BM25 Catalog",
-    description: "Search and retrieve specialized skill runbooks from the 500+ skills library on demand (e.g. Jira, TDD, code review, git-guardrails, architecture, etc.).",
+    description: "Search and retrieve specialized skill runbooks from the engineering skill library on demand (e.g. Jira, TDD, code review, git-guardrails, architecture, etc.).",
     parameters: {
       type: "object",
       properties: {

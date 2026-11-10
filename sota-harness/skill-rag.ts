@@ -105,9 +105,9 @@ export function findSkillFiles(dir: string, depth = 0, maxDepth = 3): string[] {
 /**
  * F1 SRA Engine (Skill Retrieval Augmentation & Minimal Tool Seam)
  * 
- * 1. Supports 500+ skills in memory via BM25 (< 2ms index latency).
+ * 1. Supports in-memory dynamic skill indexing via BM25 (< 2ms latency).
  * 2. On turn start (before_agent_start):
- *    - Injects 0 skills on greetings or generic tasks (saving 3,000 to 35,000 tokens).
+ *    - Injects 0 skills on greetings or generic tasks (saving 3,000 to 28,000 tokens).
  *    - Injects ONLY the top 1-2 matched skills when a task specifically calls for them.
  *    - Implements Dynamic Tool Seam: keeps passive meta/web tools out of prompt unless requested.
  * 3. Registers `find_skill` (with both execute & handler for Pi 1.4+ compatibility)
@@ -186,7 +186,7 @@ export default function (pi: ExtensionAPI) {
     const promptText = (event as any).prompt || (event as any).userPrompt || "";
     const isWebRequested = /\b(web|search|browse|fetch|url|http|https|docs|online|google|jira|atlassian)\b/i.test(promptText);
 
-    // 1. Minimal Tool Seam: Filter noisy tools from the active model schema
+    // 1. Minimal Tool Seam: Filter noisy tools & context-gate MCP tools from the active model schema
     if (event.systemPromptOptions.selectedTools) {
       const PASSIVE_TOOLS = new Set([
         "fetch_budget_from_portkey",
@@ -196,9 +196,25 @@ export default function (pi: ExtensionAPI) {
         "subagent",
         ...(!isWebRequested ? ["web_search", "source_check", "fetch_content", "get_search_content"] : [])
       ]);
-      event.systemPromptOptions.selectedTools = event.systemPromptOptions.selectedTools.filter(
-        (t) => !PASSIVE_TOOLS.has(t)
-      );
+
+      event.systemPromptOptions.selectedTools = event.systemPromptOptions.selectedTools.filter((t) => {
+        if (PASSIVE_TOOLS.has(t)) return false;
+        // Context-gate MCP tools (mcp__<server>__<tool>): omit unless prompt references server or tool keywords
+        if (t.startsWith("mcp__")) {
+          const parts = t.split("__");
+          if (parts.length >= 2) {
+            const serverName = parts[1].toLowerCase().replace(/[-_]/g, "");
+            const toolName = (parts[2] || "").toLowerCase().replace(/[-_]/g, "");
+            const promptNorm = promptText.toLowerCase().replace(/[-_]/g, "");
+            const serverMatch = serverName.length >= 3 && promptNorm.includes(serverName);
+            const toolMatch = toolName.length >= 4 && promptNorm.includes(toolName);
+            if (!serverMatch && !toolMatch) {
+              return false;
+            }
+          }
+        }
+        return true;
+      });
     }
 
     // 2. Intent-based Skill Injection: Zero tokens on generic prompts
@@ -274,7 +290,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "find_skill",
     label: "Search & Mount Skills from BM25 Catalog",
-    description: "Search and retrieve specialized skill runbooks from the 500+ skills library on demand (e.g. Jira, TDD, code review, git-guardrails, architecture, etc.).",
+    description: "Search and retrieve specialized skill runbooks from the engineering skill library on demand (e.g. Jira, TDD, code review, git-guardrails, architecture, etc.).",
     parameters: {
       type: "object",
       properties: {

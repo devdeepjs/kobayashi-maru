@@ -8,7 +8,7 @@
 
 | Feature | Naive Agent Harness (Claude Code, Pi default) | Kobayashi Maru (BM25 Skill-RAG) |
 | :--- | :--- | :--- |
-| **Startup Token Cost** | **37,500 tokens / turn** (Dumps all 500+ skills into prompt) | **0 tokens** on greetings; **~150 tokens** on match |
+| **Startup Token Cost** | **~28,500 tokens / turn** (Dumps all 38 skills into prompt) | **0 tokens** on greetings; **~150 tokens** on match |
 | **Dollar Cost on Cold Start** | ~$0.11 per simple prompt like `"hi"` | **$0.0000** wasted on skills |
 | **Matching Speed** | N/A (Brute force text injection) | **$< 2\text{ms}$** in-memory Okapi BM25 ranker |
 | **Adding New Skills** | Makes system prompt longer and degrades model attention | Adds $0$ prompt overhead until dynamically queried |
