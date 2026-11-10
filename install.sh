@@ -200,6 +200,19 @@ for (const ext of desiredExts) {
 }
 settings.extensions = currentExts;
 
+// Ensure ecosystem packages (pi-btw side-question engine and pi-caffeinate) are registered
+const currentPackages = Array.isArray(settings.packages) ? settings.packages : [];
+const desiredPackages = [
+  'npm:@narumitw/pi-btw',
+  'npm:@narumitw/pi-caffeinate'
+];
+for (const pkg of desiredPackages) {
+  if (!currentPackages.includes(pkg)) {
+    currentPackages.push(pkg);
+  }
+}
+settings.packages = currentPackages;
+
 // Configure enabledModels for instant Ctrl+P cycle (incorporating Cursor as non-default sniper)
 fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 console.log('  ✔ Configured defaultModel: ' + settings.defaultModel);
