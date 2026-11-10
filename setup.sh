@@ -1053,6 +1053,11 @@ if [ -f "${SCRIPT_DIR}/package.json" ]; then
     (cd "${SCRIPT_DIR}" && npm install --no-audit --prefer-offline 2>/dev/null || npm install)
   fi
   (cd "${SCRIPT_DIR}" && npm run build >/dev/null 2>&1 || true)
+  if [ -f "${SCRIPT_DIR}/dist/bin/kobayashi.js" ]; then
+    chmod +x "${SCRIPT_DIR}/dist/bin/kobayashi.js"
+    mkdir -p "${HOME}/.local/bin"
+    ln -sf "${SCRIPT_DIR}/dist/bin/kobayashi.js" "${HOME}/.local/bin/kobayashi" 2>/dev/null || true
+  fi
   (cd "${SCRIPT_DIR}" && npm link >/dev/null 2>&1 || true)
   if command -v kobayashi >/dev/null 2>&1; then
     echo -e "  ✔ Kobayashi CLI linked globally: ${GREEN}$(which kobayashi)${RESET}"

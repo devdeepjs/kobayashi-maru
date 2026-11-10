@@ -253,10 +253,15 @@ if [ -f "${SCRIPT_DIR}/package.json" ]; then
   fi
   (cd "${SCRIPT_DIR}" && npm run build >/dev/null 2>&1 || true)
   
-  # Link CLI to ~/.local/bin or /usr/local/bin
+  # Link compiled CLI to ~/.local/bin or /usr/local/bin
   LOCAL_BIN="${HOME}/.local/bin"
   mkdir -p "${LOCAL_BIN}"
-  ln -sf "${SCRIPT_DIR}/bin/kobayashi.ts" "${LOCAL_BIN}/kobayashi" 2>/dev/null || true
+  if [ -f "${SCRIPT_DIR}/dist/bin/kobayashi.js" ]; then
+    chmod +x "${SCRIPT_DIR}/dist/bin/kobayashi.js"
+    ln -sf "${SCRIPT_DIR}/dist/bin/kobayashi.js" "${LOCAL_BIN}/kobayashi" 2>/dev/null || true
+  else
+    ln -sf "${SCRIPT_DIR}/bin/kobayashi.ts" "${LOCAL_BIN}/kobayashi" 2>/dev/null || true
+  fi
 fi
 
 # Run retroactive session synchronization and print scorecard

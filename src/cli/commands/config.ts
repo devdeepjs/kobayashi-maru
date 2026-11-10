@@ -8,6 +8,37 @@ import { checkOllama, discoverPiModels, DiscoveredModel } from "../../utils/syst
 import { applyCommand } from "./apply.js";
 import { loadConfig } from "../../config/parser.js";
 
+// ---------------------------------------------------------------------------
+// Set user identity name in virtual-models.json (read by before_agent_start)
+// Usage: kobayashi config set-name "Deepanshu"
+// Also export KOBAYASHI_USER="Deepanshu" for session-only override
+// ---------------------------------------------------------------------------
+export async function setNameCommand(name?: string): Promise<void> {
+  const vcPath = path.join(process.env.HOME || "", ".pi", "agent", "virtual-models.json");
+  let resolvedName = name?.trim();
+
+  if (!resolvedName) {
+    resolvedName = await input({
+      message: "Enter your name (Pi will address you by this in every session):",
+      validate: (v) => v.trim().length > 0 || "Name cannot be empty",
+    });
+    resolvedName = resolvedName.trim();
+  }
+
+  let config: Record<string, any> = {};
+  if (fs.existsSync(vcPath)) {
+    try { config = JSON.parse(fs.readFileSync(vcPath, "utf8")); } catch {}
+  }
+
+  config.userName = resolvedName;
+  fs.mkdirSync(path.dirname(vcPath), { recursive: true });
+  fs.writeFileSync(vcPath, JSON.stringify(config, null, 2));
+
+  logger.success(`Identity set: Pi will now address you as "${resolvedName}" in every session.`);
+  console.log(chalk.dim(`  Stored in: ${vcPath}`));
+  console.log(chalk.dim(`  One-session override: export KOBAYASHI_USER="${resolvedName}"`));
+}
+
 interface SearchChoice {
   name: string;
   value: string;

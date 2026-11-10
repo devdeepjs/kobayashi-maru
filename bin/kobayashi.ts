@@ -6,7 +6,7 @@ import { applyCommand } from "../src/cli/commands/apply.js";
 import { startCommand } from "../src/cli/commands/start.js";
 import { skillsCommand } from "../src/cli/commands/skills.js";
 import { advisorCommand } from "../src/cli/commands/advisor.js";
-import { configCommand } from "../src/cli/commands/config.js";
+import { configCommand, setNameCommand } from "../src/cli/commands/config.js";
 import { statsCommand } from "../src/cli/commands/stats.js";
 import { evalCommand } from "../src/cli/commands/eval.js";
 import { mcpCommand } from "../src/cli/commands/mcp.js";
@@ -126,5 +126,10 @@ program
   .option("-s, --summary <summary>", "Brief context summary")
   .option("-c, --snippet <snippet>", "Code snippet to analyze")
   .action(advisorCommand);
+
+program
+  .command("set-name [name]")
+  .description("Set your name so Pi addresses you personally in every session (stored in virtual-models.json, reads KOBAYASHI_USER env as override)")
+  .action(setNameCommand);
 
 program.parse(process.argv);

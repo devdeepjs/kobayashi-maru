@@ -584,6 +584,44 @@ export default function (pi: ExtensionAPI) {
         // Telemetry logging is completely isolated and never interrupts agent turns
       }
     });
+
+    // --------------------------------------------------------------------------
+    // User Identity Hook: inject KOBAYASHI_USER name into system prompt
+    // Set env var KOBAYASHI_USER="Your Name" or add "userName" to virtual-models.json
+    // Pi docs: before_agent_start lets extensions append to systemPromptOptions
+    // --------------------------------------------------------------------------
+    if (typeof (pi as any).on === "function") {
+      (pi as any).on("before_agent_start", async (event: any, _ctx: any) => {
+        try {
+          const userName =
+            process.env.KOBAYASHI_USER ||
+            (() => {
+              const vcPath = path.join(process.env.HOME || "", ".pi", "agent", "virtual-models.json");
+              if (fs.existsSync(vcPath)) {
+                const vc = JSON.parse(fs.readFileSync(vcPath, "utf8"));
+                return vc.userName as string | undefined;
+              }
+              return undefined;
+            })();
+
+          if (userName) {
+            if (event?.systemPromptOptions?.promptGuidelines && Array.isArray(event.systemPromptOptions.promptGuidelines)) {
+              event.systemPromptOptions.promptGuidelines.push(
+                `The user's name is ${userName}. Address them by name when appropriate.`
+              );
+            }
+            const existing = event?.systemPrompt || "";
+            if (!existing.includes(userName)) {
+              return {
+                systemPrompt: existing + `\n\nUser Identity: The user's name is ${userName}. Address them by name when appropriate.`,
+              };
+            }
+          }
+        } catch {
+          // Identity injection is best-effort — never interrupt agent start
+        }
+      });
+    }
   }
 
   // --------------------------------------------------------------------------
