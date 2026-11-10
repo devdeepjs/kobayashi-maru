@@ -132,6 +132,12 @@ if [ -f "${SCRIPT_DIR}/vendor/extensions/protected-paths.ts" ]; then
   echo -e "  ✔ Deployed ${BOLD}protected-paths.ts${RESET} (Secret & git modification guardrail)"
 fi
 
+# Deploy Session Namer (Auto-names sessions & adds /rename command)
+if [ -f "${SCRIPT_DIR}/vendor/extensions/session-namer.ts" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/extensions/session-namer.ts" "${EXTENSIONS_DIR}/session-namer.ts"
+  echo -e "  ✔ Deployed ${BOLD}session-namer.ts${RESET} (/rename & Turn-1 clean naming)"
+fi
+
 # Deploy Agent Profiles (scout, planner, reviewer, worker)
 mkdir -p "${PI_AGENT_DIR}/agents"
 if [ -d "${SCRIPT_DIR}/vendor/agents" ]; then
