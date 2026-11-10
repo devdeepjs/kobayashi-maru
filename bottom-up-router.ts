@@ -527,10 +527,7 @@ export default function (pi: ExtensionAPI) {
     pi.on("session_start", async (_event: any, ctx: any) => {
       try {
         if (ctx?.hasUI && ctx?.ui?.setStatus) {
-          ctx.ui.setStatus(
-            "kobayashi",
-            "🏎️  Kobayashi Powertrain: Active | BM25 RAG: 0-Token Cold Starts | /roi"
-          );
+          ctx.ui.setStatus("kobayashi", "🏎️ KM");
         }
       } catch {}
     });
