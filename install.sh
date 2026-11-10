@@ -57,33 +57,34 @@ echo -e "${BOLD}${CYAN}=========================================================
 mkdir -p "${PI_AGENT_DIR}" "${EXTENSIONS_DIR}"
 
 # ------------------------------------------------------------------------------
-# 1. Clean Broken Symlinks in ~/.pi/agent/extensions/
 # ------------------------------------------------------------------------------
-echo -e "${CYAN}[1/6] Cleaning up broken extension symlinks...${RESET}"
+# 1. Clean Broken Symlinks in ~/.pi/agent/ (Recursive: extensions, agents, prompts)
+# ------------------------------------------------------------------------------
+echo -e "${CYAN}[1/6] Cleaning up broken symlinks across Pi directories...${RESET}"
 BROKEN_COUNT=0
-if [ -d "${EXTENSIONS_DIR}" ]; then
-  for item in "${EXTENSIONS_DIR}"/*; do
-    if [ -L "$item" ] && [ ! -e "$item" ]; then
-      echo -e "  ${YELLOW}• Removing broken symlink:${RESET} $(basename "$item")"
+if [ -d "${PI_AGENT_DIR}" ]; then
+  while IFS= read -r item; do
+    if [ -n "$item" ]; then
+      echo -e "  ${YELLOW}• Removing broken symlink:${RESET} $item"
       rm -f "$item"
       BROKEN_COUNT=$((BROKEN_COUNT + 1))
     fi
-  done
+  done < <(find "${PI_AGENT_DIR}" -type l ! -exec test -e {} \; -print 2>/dev/null || true)
 fi
 
 if [ "$BROKEN_COUNT" -gt 0 ]; then
-  echo -e "  ${GREEN}✔ Cleaned up ${BROKEN_COUNT} broken extension symlink(s)${RESET}"
+  echo -e "  ${GREEN}✔ Cleaned up ${BROKEN_COUNT} broken symlink(s)${RESET}"
 else
   echo -e "  ✔ No broken symlinks found"
 fi
 
 # ------------------------------------------------------------------------------
-# 2. Deploy Self-Contained Kobayashi Extensions
+# 2. Deploy Self-Contained Kobayashi Extensions, Subagents & Plan-Mode
 # ------------------------------------------------------------------------------
-echo -e "\n${CYAN}[2/6] Deploying self-contained zero-bloat extensions...${RESET}"
+echo -e "\n${CYAN}[2/6] Deploying self-contained zero-bloat extensions & subagents...${RESET}"
 
 cp -f "${SCRIPT_DIR}/bottom-up-router.ts" "${EXTENSIONS_DIR}/bottom-up-router.ts"
-echo -e "  ✔ Deployed ${BOLD}bottom-up-router.ts${RESET} (Native virtual model routing & live turn telemetry)"
+echo -e "  ✔ Deployed ${BOLD}bottom-up-router.ts${RESET} (Native virtual model routing, identity hook & live turn telemetry)"
 
 cp -f "${SCRIPT_DIR}/skill-rag.ts" "${EXTENSIONS_DIR}/skill-rag.ts"
 echo -e "  ✔ Deployed ${BOLD}skill-rag.ts${RESET} (Okapi BM25 zero-token cold start gating & minimal tool seam)"
@@ -94,15 +95,43 @@ echo -e "  ✔ Deployed ${BOLD}git-checkpoint.ts${RESET} (Architecture-safe turn
 cp -f "${SCRIPT_DIR}/repo-mapper.ts" "${EXTENSIONS_DIR}/repo-mapper.ts"
 echo -e "  ✔ Deployed ${BOLD}repo-mapper.ts${RESET} (AST-grep codebase topology outline in <800 tokens)"
 
-# Restore valid handoff.ts and todo.ts from current Pi release if missing or broken
-PI_RELEASE_EXT=$(find "${PI_AGENT_DIR}/install/releases" -type d -name "examples" 2>/dev/null | grep "extensions" | head -n 1 || true)
-if [ -n "$PI_RELEASE_EXT" ] && [ -d "$PI_RELEASE_EXT" ]; then
-  if [ -f "${PI_RELEASE_EXT}/handoff.ts" ]; then
-    cp -f "${PI_RELEASE_EXT}/handoff.ts" "${EXTENSIONS_DIR}/handoff.ts"
-  fi
-  if [ -f "${PI_RELEASE_EXT}/todo.ts" ]; then
-    cp -f "${PI_RELEASE_EXT}/todo.ts" "${EXTENSIONS_DIR}/todo.ts"
-  fi
+# Deploy Plan Mode (Safe read-only exploration & progress tracking)
+mkdir -p "${EXTENSIONS_DIR}/plan-mode"
+if [ -d "${SCRIPT_DIR}/vendor/extensions/plan-mode" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/extensions/plan-mode/"*.ts "${EXTENSIONS_DIR}/plan-mode/"
+  echo -e "  ✔ Deployed ${BOLD}plan-mode${RESET} (/plan & Ctrl+Alt+P two-stage safe exploration mode)"
+fi
+
+# Deploy Subagents (Isolated context task delegation)
+mkdir -p "${EXTENSIONS_DIR}/subagent"
+if [ -d "${SCRIPT_DIR}/vendor/extensions/subagent" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/extensions/subagent/"*.ts "${EXTENSIONS_DIR}/subagent/"
+  echo -e "  ✔ Deployed ${BOLD}subagent${RESET} (Isolated context parallel & chained subagent tool)"
+fi
+
+# Deploy in-session Todo and Context Handoff
+if [ -f "${SCRIPT_DIR}/vendor/extensions/todo.ts" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/extensions/todo.ts" "${EXTENSIONS_DIR}/todo.ts"
+  echo -e "  ✔ Deployed ${BOLD}todo.ts${RESET} (/todos branch-safe session checklist)"
+fi
+
+if [ -f "${SCRIPT_DIR}/vendor/extensions/handoff.ts" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/extensions/handoff.ts" "${EXTENSIONS_DIR}/handoff.ts"
+  echo -e "  ✔ Deployed ${BOLD}handoff.ts${RESET} (/handoff lossless context transfer)"
+fi
+
+# Deploy Agent Profiles (scout, planner, reviewer, worker)
+mkdir -p "${PI_AGENT_DIR}/agents"
+if [ -d "${SCRIPT_DIR}/vendor/agents" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/agents/"*.md "${PI_AGENT_DIR}/agents/"
+  echo -e "  ✔ Deployed ${BOLD}agents/${RESET} (scout, planner, reviewer, worker profiles)"
+fi
+
+# Deploy Workflow Prompts (/implement, /scout-and-plan, /implement-and-review)
+mkdir -p "${PI_AGENT_DIR}/prompts"
+if [ -d "${SCRIPT_DIR}/vendor/prompts" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/prompts/"*.md "${PI_AGENT_DIR}/prompts/"
+  echo -e "  ✔ Deployed ${BOLD}prompts/${RESET} (/implement, /scout-and-plan workflow templates)"
 fi
 
 # ------------------------------------------------------------------------------
@@ -147,10 +176,35 @@ for (const ext of desiredExts) {
 }
 settings.extensions = currentExts;
 
+// Configure enabledModels for instant Ctrl+P cycle (incorporating Cursor as non-default sniper)
+if (!settings.enabledModels || !Array.isArray(settings.enabledModels)) {
+  settings.enabledModels = [
+    'auto/planner-worker',
+    'auto/bottom-up',
+    'bedrock-mantle/openai.gpt-5.6-luna',
+    'ollama/ornith-1.5:ctx',
+    'amazon-bedrock/us.anthropic.claude-sonnet-5-5',
+    'cursor/claude-opus-5'
+  ];
+}
+
 fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 console.log('  ✔ Configured defaultModel: ' + settings.defaultModel);
 console.log('  ✔ Enabled streaming prompt cache warming');
+console.log('  ✔ Configured enabledModels for Ctrl+P cycle (with Cursor sniper tier)');
 "
+
+# Enforce Cursor-to-Pi $20 budget cap in shell profile
+if [ -f "${HOME}/.zshrc" ]; then
+  if ! grep -q "PI_CURSOR_CONTEXT=" "${HOME}/.zshrc" 2>/dev/null; then
+    cat << 'EOF' >> "${HOME}/.zshrc"
+
+# Cursor-to-Pi $20/mo Budget Guardrails
+export PI_CURSOR_CONTEXT="min"
+EOF
+    echo -e "  ✔ Added PI_CURSOR_CONTEXT='min' budget guardrail to ~/.zshrc"
+  fi
+fi
 
 # ------------------------------------------------------------------------------
 # 4. Deploy Virtual Models & NVIDIA SoL-Pi Configuration
