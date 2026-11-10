@@ -1,6 +1,6 @@
 # 🚀 Kobayashi Maru // Viral Launch Kit (Copy-Paste Ready)
 
-> **Everything prepared for Devdeep.**  
+> **Production-grade Agent Harness & Optimization Engine.**  
 > Simply copy, paste into the target platform, and hit Submit.
 
 ---

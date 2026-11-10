@@ -10,8 +10,8 @@ import { loadConfig } from "../../config/parser.js";
 
 // ---------------------------------------------------------------------------
 // Set user identity name in virtual-models.json (read by before_agent_start)
-// Usage: kobayashi config set-name "Devdeep"
-// Also export KOBAYASHI_USER="Devdeep" for session-only override
+// Usage: kobayashi config set-name "YourName"
+// Also export KOBAYASHI_USER="YourName" for session-only override
 // ---------------------------------------------------------------------------
 export async function setNameCommand(name?: string): Promise<void> {
   const vcPath = path.join(process.env.HOME || "", ".pi", "agent", "virtual-models.json");
