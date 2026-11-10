@@ -703,50 +703,152 @@ export default function (pi: ExtensionAPI) {
     });
 
     pi.registerCommand("virtual", {
-      description: "Select and switch between active virtual model routers",
+      description: "Select, create, or configure virtual model routers in real time",
       handler: async (args: string, ctx: any) => {
         try {
           const vConfigPath = path.join(process.env.HOME || "", ".pi", "agent", "virtual-models.json");
+          let rawConfig: any = {};
+          if (fs.existsSync(vConfigPath)) {
+            try { rawConfig = JSON.parse(fs.readFileSync(vConfigPath, "utf8")); } catch {}
+          }
+          if (!rawConfig.custom) rawConfig.custom = {};
+
+          const sub = args?.trim().toLowerCase();
+
+          // 1. In-session Create / Add Wizard
+          if (sub === "add" || sub === "create" || sub === "new") {
+            if (!ctx?.hasUI || !ctx?.ui) {
+              if (ctx?.ui?.notify) ctx.ui.notify("Interactive UI required for virtual model creation", "error");
+              return;
+            }
+
+            const rawId = await ctx.ui.input("Enter Virtual Model ID (e.g. grok-pair, opus-local, fast-dev):", "my-router");
+            if (!rawId) return;
+            const cleanId = rawId.trim().toLowerCase().replace(/[^a-z0-9-_]/g, "");
+            if (!cleanId || cleanId === "planner-worker" || cleanId === "bottom-up") {
+              ctx.ui.notify("Invalid ID or overlaps with standard models", "error");
+              return;
+            }
+
+            // Discover live available models for dropdown
+            let availableList: string[] = [];
+            if (ctx?.modelRegistry?.getAvailable) {
+              try {
+                const live = await ctx.modelRegistry.getAvailable();
+                if (Array.isArray(live)) {
+                  availableList = live.map((m: any) => `${m.provider}/${m.id}`);
+                }
+              } catch {}
+            }
+            if (availableList.length === 0) {
+              availableList = ["bedrock-mantle/openai.gpt-5.6-luna", "ollama/ornith-1.5:ctx", "cursor/default"];
+            }
+
+            const pickedPlanner = await ctx.ui.select("Select Planner Model (Turn 1 & Escalations):", availableList);
+            if (!pickedPlanner) return;
+
+            const pickedWorker = await ctx.ui.select("Select Worker Model (Turn 2+ Execution):", availableList);
+            if (!pickedWorker) return;
+
+            const pickedPolicyChoice = await ctx.ui.select("Select Routing Policy:", [
+              "Top-Down (Planner reasons Turn 1 -> Worker executes Turn 2+)",
+              "Bottom-Up (Local Worker executes first at $0 -> Planner escalates on error)",
+            ]);
+            const policy = pickedPolicyChoice && pickedPolicyChoice.startsWith("Bottom-Up") ? "bottom-up" : "planner-worker";
+
+            // Save to virtual-models.json
+            rawConfig.custom[cleanId] = {
+              name: `Custom Router (${cleanId})`,
+              provider: "auto",
+              planner: pickedPlanner,
+              worker: pickedWorker,
+              policy,
+              escalationThreshold: 2,
+            };
+            fs.mkdirSync(path.dirname(vConfigPath), { recursive: true });
+            fs.writeFileSync(vConfigPath, JSON.stringify(rawConfig, null, 2) + "\n");
+
+            // Register live immediately in current Pi session
+            const plannerSpec = parseModelSpec(pickedPlanner, "bedrock-mantle", "openai.gpt-5.6-luna", "medium");
+            const workerSpec = parseModelSpec(pickedWorker, "ollama", "ornith-1.5:ctx", "off");
+            if (policy === "bottom-up") {
+              pi.registerVirtualModel<RouterState>({
+                provider: "auto",
+                id: cleanId,
+                name: `Custom Router (${cleanId})`,
+                thinkingLevels: ["off", "low", "medium", "high"],
+                contextWindow: 128_000,
+                maxTokens: 16_384,
+                route: createBottomUpRoute(plannerSpec, workerSpec, 2),
+              });
+            } else {
+              pi.registerVirtualModel<PlannerWorkerState>({
+                provider: "auto",
+                id: cleanId,
+                name: `Custom Router (${cleanId})`,
+                thinkingLevels: ["off", "low", "medium", "high"],
+                contextWindow: 128_000,
+                maxTokens: 16_384,
+                route: createPlannerWorkerRoute(plannerSpec, workerSpec, 2),
+              });
+            }
+
+            if (ctx?.setModel) {
+              await ctx.setModel({ provider: "auto", id: cleanId });
+            }
+            ctx.ui.notify(`✔ Virtual Model auto/${cleanId} created and activated!`, "info");
+            return;
+          }
+
+          // 2. In-session Delete
+          if (sub === "rm" || sub === "delete" || sub === "remove") {
+            const customKeys = Object.keys(rawConfig.custom || {});
+            if (customKeys.length === 0) {
+              if (ctx?.ui?.notify) ctx.ui.notify("No custom virtual models found to delete", "warning");
+              return;
+            }
+            const toDelete = await ctx.ui.select("Select Virtual Model to Delete:", customKeys.map(k => `auto/${k}`));
+            if (toDelete) {
+              const delId = toDelete.replace("auto/", "");
+              delete rawConfig.custom[delId];
+              fs.writeFileSync(vConfigPath, JSON.stringify(rawConfig, null, 2) + "\n");
+              ctx.ui.notify(`Deleted virtual model auto/${delId}`, "info");
+            }
+            return;
+          }
+
+          // 3. Normal /virtual (switch or manage)
           let virtualModels: { id: string; label: string }[] = [
             { id: "auto/planner-worker", label: "auto/planner-worker (Planner -> Local RAM Workhorse)" },
             { id: "auto/bottom-up", label: "auto/bottom-up ($0 Local Workhorse -> Planner Escalation)" },
           ];
 
-          if (fs.existsSync(vConfigPath)) {
-            try {
-              const c = JSON.parse(fs.readFileSync(vConfigPath, "utf8"));
-              if (c.custom && typeof c.custom === "object") {
-                for (const [id, m] of Object.entries(c.custom)) {
-                  const spec = m as any;
-                  const pModel = spec.planner?.model || (typeof spec.planner === "string" ? spec.planner : "planner");
-                  const wModel = spec.worker?.model || (typeof spec.worker === "string" ? spec.worker : "worker");
-                  virtualModels.push({
-                    id: `auto/${id}`,
-                    label: `auto/${id} (${spec.name || `${pModel} + ${wModel}`})`,
-                  });
-                }
-              }
-            } catch {}
-          }
-
-          const query = args?.trim().toLowerCase();
-          if (query) {
-            const match = virtualModels.find(v => v.id.toLowerCase().includes(query) || v.label.toLowerCase().includes(query));
-            if (match) {
-              const cleanId = match.id.replace("auto/", "");
-              if (ctx?.setModel) {
-                await ctx.setModel({ provider: "auto", id: cleanId });
-                if (ctx?.ui?.notify) ctx.ui.notify(`🏎️ Switched to virtual model: ${match.id}`, "info");
-              }
-              return;
-            }
+          for (const [id, m] of Object.entries(rawConfig.custom || {})) {
+            const spec = m as any;
+            const pModel = spec.planner?.model || (typeof spec.planner === "string" ? spec.planner : "planner");
+            const wModel = spec.worker?.model || (typeof spec.worker === "string" ? spec.worker : "worker");
+            virtualModels.push({
+              id: `auto/${id}`,
+              label: `auto/${id} (${spec.name || `${pModel} + ${wModel}`})`,
+            });
           }
 
           if (ctx?.ui?.select) {
-            const choices = virtualModels.map(v => v.label);
-            const picked = await ctx.ui.select("Active Virtual Models:", choices);
-            if (picked) {
-              const modelId = picked.split(" ")[0];
+            const options = [
+              ...virtualModels.map(v => `🏎️  Switch to ${v.label}`),
+              "➕  Create New Custom Virtual Model (/virtual add)",
+              "🗑️   Delete a Custom Virtual Model (/virtual rm)",
+            ];
+            const picked = await ctx.ui.select("Virtual Models Manager:", options);
+            if (!picked) return;
+
+            if (picked.startsWith("➕")) {
+              // Trigger add
+              return (pi as any).commands?.get?.("virtual")?.handler?.("add", ctx);
+            } else if (picked.startsWith("🗑️")) {
+              return (pi as any).commands?.get?.("virtual")?.handler?.("rm", ctx);
+            } else {
+              const modelId = picked.replace("🏎️  Switch to ", "").split(" ")[0];
               const cleanId = modelId.replace("auto/", "");
               if (ctx?.setModel) {
                 await ctx.setModel({ provider: "auto", id: cleanId });

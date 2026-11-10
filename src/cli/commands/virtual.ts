@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import chalk from "chalk";
-import { input, select, confirm } from "@inquirer/prompts";
+import { input, select, confirm, search } from "@inquirer/prompts";
 import { logger } from "../../utils/logger.js";
 import { loadVirtualModelConfig, CustomVirtualModelSpec } from "../../../bottom-up-router.js";
 import { checkOllama, discoverPiModels, DiscoveredModel } from "../../utils/system.js";
@@ -9,6 +9,49 @@ import { checkOllama, discoverPiModels, DiscoveredModel } from "../../utils/syst
 const HOME = process.env.HOME || "";
 const CONFIG_PATH = path.join(HOME, ".pi", "agent", "virtual-models.json");
 const SETTINGS_PATH = path.join(HOME, ".pi", "agent", "settings.json");
+
+/**
+ * Real-time searchable prompt for discovered models
+ */
+async function promptModelSearch(message: string, defaultKeyword?: string): Promise<string> {
+  const discovered = discoverPiModels();
+  const choices = discovered.map((m) => {
+    const fullId = `${m.provider}/${m.id}`;
+    const ctx = m.context ? ` (${m.context} ctx)` : "";
+    return {
+      name: `${fullId}${ctx}`,
+      value: fullId,
+      description: `Provider: ${m.provider} • Max Output: ${m.maxOut} • Thinking: ${m.thinking ? "Yes" : "No"}`,
+    };
+  });
+
+  return await search({
+    message,
+    source: async (term?: string) => {
+      if (!term || term.trim() === "") {
+        if (defaultKeyword) {
+          const match = choices.find((c) => c.value.toLowerCase().includes(defaultKeyword.toLowerCase()));
+          if (match) return [match, ...choices.filter((c) => c !== match)];
+        }
+        return choices;
+      }
+      const q = term.toLowerCase().trim();
+      const matches = choices.filter(
+        (c) => c.value.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+      );
+      if (matches.length === 0) {
+        return [
+          {
+            name: chalk.yellow(`Use custom: "${term}"`),
+            value: term,
+            description: "Custom provider/model string",
+          },
+        ];
+      }
+      return matches;
+    },
+  });
+}
 
 /**
  * Lists all active built-in and user-defined virtual models
@@ -92,18 +135,12 @@ export async function createVirtualModel(options: {
 
   let planner = options.planner;
   if (!planner) {
-    planner = await input({
-      message: "Planner Model (provider/model, e.g. bedrock-mantle/openai.gpt-5.6-luna or anthropic/claude-3-7-sonnet-20250219):",
-      default: "bedrock-mantle/openai.gpt-5.6-luna",
-    });
+    planner = await promptModelSearch("Search & select Planner Model (Turn 1 / Escalations):", "luna");
   }
 
   let worker = options.worker;
   if (!worker) {
-    worker = await input({
-      message: "Worker Model (provider/model, e.g. ollama/ornith-1.5:ctx or ollama/qwen2.5-coder:14b-16k):",
-      default: "ollama/ornith-1.5:ctx",
-    });
+    worker = await promptModelSearch("Search & select Worker Model (Turn 2+ execution):", "ornith");
   }
 
   let policy = options.policy;
@@ -184,6 +221,94 @@ export async function createVirtualModel(options: {
 }
 
 /**
+ * Delete a custom virtual model
+ */
+export async function removeVirtualModel(targetId?: string): Promise<void> {
+  let rawData: any = {};
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      rawData = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    }
+  } catch {}
+
+  const custom = rawData.custom || {};
+  const customIds = Object.keys(custom);
+
+  if (customIds.length === 0) {
+    logger.warn("No custom virtual models configured in ~/.pi/agent/virtual-models.json.");
+    return;
+  }
+
+  let id = targetId?.trim().toLowerCase().replace(/^auto\//, "");
+  if (!id) {
+    id = await select({
+      message: "Select custom virtual model to delete:",
+      choices: customIds.map((k) => ({
+        name: `auto/${k} (${custom[k].name || k})`,
+        value: k,
+      })),
+    });
+  }
+
+  if (custom[id]) {
+    delete custom[id];
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(rawData, null, 2) + "\n");
+    logger.success(`Deleted custom virtual model auto/${id} from ${CONFIG_PATH}`);
+
+    try {
+      if (fs.existsSync(SETTINGS_PATH)) {
+        const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
+        if (settings.defaultModel === id && settings.defaultProvider === "auto") {
+          settings.defaultModel = "planner-worker";
+          fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+          console.log(chalk.dim(`  Reset default Pi model to auto/planner-worker in settings.json`));
+        }
+      }
+    } catch {}
+  } else {
+    logger.error(`Virtual model auto/${id} does not exist. Run 'kobayashi virtual list' to see available models.`);
+  }
+}
+
+/**
+ * Set an existing virtual model as Pi default
+ */
+export async function setDefaultVirtualModel(targetId?: string): Promise<void> {
+  const vConfig = loadVirtualModelConfig();
+  const available: string[] = ["planner-worker", "bottom-up"];
+  if (vConfig.custom) {
+    for (const k of Object.keys(vConfig.custom)) {
+      available.push(k);
+    }
+  }
+
+  let id = targetId?.trim().toLowerCase().replace(/^auto\//, "");
+  if (!id) {
+    id = await select({
+      message: "Select virtual model to set as Pi default:",
+      choices: available.map((k) => ({ name: `auto/${k}`, value: k })),
+    });
+  }
+
+  if (available.includes(id)) {
+    try {
+      let settings: any = {};
+      if (fs.existsSync(SETTINGS_PATH)) {
+        settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
+      }
+      settings.defaultProvider = "auto";
+      settings.defaultModel = id;
+      fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+      logger.success(`Default model set to ${chalk.bold.green(`auto/${id}`)} in ~/.pi/agent/settings.json`);
+    } catch (e: any) {
+      logger.error(`Failed to update settings.json: ${e.message}`);
+    }
+  } else {
+    logger.error(`Virtual model auto/${id} not found. Available: ${available.map((a) => `auto/${a}`).join(", ")}`);
+  }
+}
+
+/**
  * Main command dispatcher for 'kobayashi virtual'
  */
 export async function virtualCommand(
@@ -203,6 +328,16 @@ export async function virtualCommand(
 
   if (sub === "list" || sub === "ls") {
     await listVirtualModels();
+    return;
+  }
+
+  if (sub === "rm" || sub === "remove" || sub === "delete" || sub === "del") {
+    await removeVirtualModel(extraId || options.id);
+    return;
+  }
+
+  if (sub === "default" || sub === "set-default") {
+    await setDefaultVirtualModel(extraId || options.id);
     return;
   }
 
