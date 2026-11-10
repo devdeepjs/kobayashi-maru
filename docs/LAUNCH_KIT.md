@@ -1,6 +1,6 @@
 # 🚀 Kobayashi Maru // Viral Launch Kit (Copy-Paste Ready)
 
-> **Everything prepared for Deepanshu.**  
+> **Everything prepared for Devdeep.**  
 > Simply copy, paste into the target platform, and hit Submit.
 
 ---
