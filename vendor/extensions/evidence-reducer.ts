@@ -112,7 +112,7 @@ export default function (pi: ExtensionAPI) {
 	// Slash command: /reducer [on|off|status|reset]
 	pi.registerCommand("reducer", {
 		description: "Toggle or check Evidence-Preserving Output Reducer (/reducer on|off|status|reset)",
-		handler: async (args, ctx) => {
+		handler: async (args: string, ctx: any) => {
 			const sub = args.trim().toLowerCase();
 			if (sub === "on") {
 				reducerEnabled = true;
@@ -134,7 +134,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// Hook into tool results to elide noise from bash command outputs
-	pi.on("tool_result", async (event) => {
+	pi.on("tool_result", async (event: any) => {
 		if (!reducerEnabled || event.toolName !== "bash") {
 			return undefined;
 		}
@@ -146,7 +146,7 @@ export default function (pi: ExtensionAPI) {
 		totalCommandsProcessed++;
 		let modified = false;
 
-		const newContent = event.content.map((item) => {
+		const newContent = event.content.map((item: any) => {
 			if (item.type !== "text" || typeof item.text !== "string") {
 				return item;
 			}

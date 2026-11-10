@@ -177,7 +177,7 @@ export default function (pi: ExtensionAPI) {
   }
 
   // Hook before_agent_start: Dynamic Skill Selection & Minimal Tool Seam
-  pi.on("before_agent_start", async (event, ctx) => {
+  pi.on("before_agent_start", async (event: any, ctx: any) => {
     const rawSkills = event.systemPromptOptions.skills || [];
     if (rawSkills.length > allSkills.length) {
       indexSkills(rawSkills);
@@ -197,7 +197,7 @@ export default function (pi: ExtensionAPI) {
         ...(!isWebRequested ? ["web_search", "source_check", "fetch_content", "get_search_content"] : [])
       ]);
 
-      event.systemPromptOptions.selectedTools = event.systemPromptOptions.selectedTools.filter((t) => {
+      event.systemPromptOptions.selectedTools = event.systemPromptOptions.selectedTools.filter((t: string) => {
         if (PASSIVE_TOOLS.has(t)) return false;
         // Context-gate MCP tools (mcp__<server>__<tool>): omit unless prompt references server or tool keywords
         if (t.startsWith("mcp__")) {
