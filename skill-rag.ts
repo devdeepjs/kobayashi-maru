@@ -223,7 +223,7 @@ export default function (pi: ExtensionAPI) {
       return;
     }
 
-    // BM25 Ranking over the 500+ skill catalog
+    // BM25 Ranking over the indexed skill catalog
     const hits = ranker.rank(promptText, skillDocs, 2);
     const matched = hits
       .filter((h: any) => h.score >= 2.5)

@@ -10,7 +10,7 @@
 When engineering teams adopt autonomous coding agents (like Claude Code, Cursor Agent, or vanilla Pi), their cloud token bills frequently explode by **$1,500 to $5,000 per developer per month**. 
 
 This happens because standard agent runtimes:
-1. **Dump 50+ to 500+ skills into prompt Turn 1** (charging $0.11 on every single prompt before work begins).
+1. **Dump dozens of skills into prompt Turn 1** (charging high token overhead on every single prompt before work begins).
 2. **Send 5,000-line test outputs and build logs directly to frontier models** ($15–$75/Mtok).
 3. **Use expensive frontier models for routine syntax fixes, git status, and grep loops**.
 

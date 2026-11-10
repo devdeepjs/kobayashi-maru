@@ -48,7 +48,7 @@ Default coding agent harnesses dump all installed skills into every prompt, burn
 **Kobayashi Maru reprograms the simulation like Formula 1:**
 - **Dual Virtual Router**: **Frontier Planner** (Luna / Sonnet / R1) formulates architecture; **$0.00 Local Workhorse** (Ollama Ornith 1.5) executes edits and tests.
 - **Evidence-Preserving Output Reducer**: Staged rule-based elision (citing NVIDIA SoL-Pi & arXiv:2609.20804) strips ANSI codes, flattens spinners, and truncates logs > 220 lines while preserving all error traces and exit codes. Saves 60–80% of tool output tokens.
-- **BM25 Skill-RAG**: Injects **0 skills on cold start**; mounts only top matched runbooks on demand (< 2ms in RAM). Pre-bundled with 38 engineering runbooks; scale-tested to 500+ skills.
+- **BM25 Skill-RAG**: Injects **0 skills on cold start**; mounts only top matched runbooks on demand (< 2ms in RAM). Pre-bundled with 38 engineering runbooks; scale-tested up to 200 host skills.
 - **Verified Capital Arbitrage**: Measured **61.5% net cost reduction** across 1,300+ live developer sessions ($13.51 actual paid vs $35.07 Claude Code baseline) and up to **95.4%** on heavy log triage benchmarks.
 - **Fresh Laptop Ready**: 1-command installer sets up virtual routers, budget caps, and backward-compatible telemetry in 3 seconds.
 

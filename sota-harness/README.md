@@ -182,7 +182,7 @@ For the full skill catalog and authoring guide, see [docs/SKILLS_GUIDE.md](docs/
 
 Tested on real-world enterprise monorepos (100k+ LOC TypeScript / React / Node.js):
 
-| Agent Harness Profile | Cold-Start Tokens (`"hi"`) | 500+ Skills Cost / Turn | Total Cost (4 Tasks) | Cost Reduction vs Claude Code | Cache Hit Rate | Accuracy | Avg Turns |
+| Agent Harness Profile | Cold-Start Tokens (`"hi"`) | Full Catalog Cost / Turn | Total Cost (4 Tasks) | Cost Reduction vs Claude Code | Cache Hit Rate | Accuracy | Avg Turns |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Claude Code** (Direct Anthropic Baseline) | 8,130 tokens | 37,500 tokens | $0.9963 | *baseline (0%)* | 0.0% | 98% | 8.0 |
 | **Vanilla Pi Coding Agent** | 8,130 tokens | 37,500 tokens | $0.7764 | -22.1% | 31.3% | 98% | 6.8 |

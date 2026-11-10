@@ -10,12 +10,12 @@
 
 | Metric | Naive Agent Harness (Claude Code / Vanilla) | Kobayashi Maru Runtime | Empirical Improvement |
 | :--- | :---: | :---: | :---: |
-| **Catalog Scalability** | Fails > 80 skills (context overflow) | **250+ real skills indexed** | **Stable at 250+ skills** |
-| **Cold-Start Prompt Bloat (`"hi"`)** | **619,023 tokens** ($1.85 / greeting) | **0 tokens** ($0.0000) | **-100% token waste** |
-| **Skill Ingestion Latency** | N/A (Linear prompt concatenation) | **0.11 ms** in-memory document map | **Sub-millisecond** |
-| **Multi-Domain Query Latency** | N/A | **1.46 ms** average BM25 ranking | **Sub-2ms in RAM** |
+| **Catalog Scalability** | Fails > 80 skills (context overflow) | **193 unique skills indexed** (38 built-in, 155 host-wide) | **Stable at 190+ skills** |
+| **Cold-Start Prompt Bloat (`"hi"`)** | **446,855 tokens** ($1.34 / greeting) | **0 tokens** ($0.0000) | **-100% token waste** |
+| **Skill Ingestion Latency** | N/A (Linear prompt concatenation) | **0.12 ms** in-memory document map | **Sub-millisecond** |
+| **Multi-Domain Query Latency** | N/A | **1.11 ms** average BM25 ranking | **Sub-2ms in RAM** |
 | **Top-1 Intent Retrieval Precision**| N/A | **90.0%** across 10 diverse domains | **High Semantic Fidelity** |
-| **Compiler / Test Log Noise** | 3,826 tokens (360 lines) | **1,351 tokens** (162 lines) | **-64.7% bash tokens** |
+| **Compiler / Test Log Noise** | 3,826 tokens (360 lines) | **1,353 tokens** (162 lines) | **-64.6% bash tokens** |
 | **Error Trace Retention** | Variable | **100% Preserved** (Assertions & Exit codes) | **Zero Evidence Loss** |
 | **Real-World Cost (1,306 Turns)** | $36.01 (Claude Code baseline) | **$13.58** (Audited live spend) | **-62.3% Net Capital Saved** |
 
@@ -23,20 +23,28 @@
 
 ## 2. Real Skill Catalog Ingestion Profile
 
-Measurements taken across real installed skills on host disk (`~/.hermes/skills`, `~/.cursor/skills-cursor`, `kobayashi/.agents/skills`, `~/.agents/skills_backup`, `~/.local/lib/qwen-code`):
+Measurements taken across real installed skills on host disk (`~/.hermes/skills`, `~/.cursor/skills-cursor`, `kobayashi/.agents/skills`, `~/.local/lib/qwen-code`, `~/Desktop/poc`):
 
 ```text
-• Total Unique Skills Discovered : 250
-• Total Raw Skill Content Size   : 2.24 MB (2,352,288 characters)
-• Equivalent Token Overhead      : 619,023 tokens
-• Full-Dump Cost on Sonnet 3.7   : $1.8571 per single greeting turn
-• BM25 Index Build Latency       : 0.11 ms
-• In-Memory RAM Footprint        : ~39.7 KB
+• Total Skill Files Found on Disk: 250 (including 57 duplicate mirrors & backups)
+• Total Unique Skills (Deduplicated): 193 unique skills
+  - 38 built-in engineering skills (kobayashi/.agents/skills)
+  - 89 Hermes Agent multi-domain skills (~/.hermes/skills)
+  - 26 Cursor Agent skills (~/.cursor/skills-cursor)
+  - 14 Qwen Code bundled skills (~/.local/lib/qwen-code)
+  - 12 Antigravity CLI built-ins (~/.gemini/antigravity-cli)
+  - 10 Temporal SpecKit skills (~/Desktop/poc/temporal-adk)
+  - 4 NPM package skills (playwright, dotenvx)
+• Total Raw Skill Content Size   : 1.62 MB (1,698,050 characters)
+• Equivalent Token Overhead      : 446,855 tokens
+• Full-Dump Cost on Sonnet 3.7   : $1.3406 per single greeting turn
+• BM25 Index Build Latency       : 0.12 ms
+• In-Memory RAM Footprint        : ~27.8 KB
 ```
 
-> [!CAUTION]
-> If a developer with 250 skills runs a standard harness that concatenates skills into the system prompt, the agent attempts to dump **619,023 tokens on Turn 1**—instantly exceeding Claude's 200,000 token context window and crashing the session.  
-> **Kobayashi Maru starts at 0 tokens** and mounts only the top 1–2 matched runbooks on demand.
+> [!NOTE]
+> Standard Claude Code or Codex does not crawl your hard drive to find other tools' skills. Each tool operates in its own silo.  
+> This benchmark demonstrates what happens if you unify an entire host development ecosystem (190+ skills) into an agent runtime: standard static dumpers choke or crash, whereas Kobayashi Maru's in-memory BM25 indexes them in 0.12ms and incurs **0 token overhead** until a skill is explicitly relevant.
 
 ---
 

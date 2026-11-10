@@ -68,16 +68,25 @@ export async function runRealTimeEmpiricalBenchmark() {
 		scanSkills(dir).forEach((s) => skillPaths.add(s));
 	}
 
+	const seenNames = new Set<string>();
 	const skills: DiscoveredSkill[] = [];
+	let totalFilesFound = 0;
 	let totalCatalogChars = 0;
 
 	for (const p of skillPaths) {
+		totalFilesFound++;
 		try {
 			const content = fs.readFileSync(p, "utf8");
 			const nameMatch = content.match(/name:\s*([^\n]+)/);
 			const descMatch = content.match(/description:\s*([^\n]+)/);
-			const name = nameMatch ? nameMatch[1].trim() : path.basename(path.dirname(p));
+			const rawName = nameMatch ? nameMatch[1].trim() : path.basename(path.dirname(p));
+			const name = rawName.replace(/^["'\s]+|["'\s]+$/g, "");
 			const desc = descMatch ? descMatch[1].trim() : "";
+
+			// Deduplicate identical skills found in backup or mirrored folders
+			if (seenNames.has(name)) continue;
+			seenNames.add(name);
+
 			const chars = content.length;
 			const estTokens = Math.round(chars / 3.8);
 
@@ -88,9 +97,9 @@ export async function runRealTimeEmpiricalBenchmark() {
 	const t1Scan = performance.now();
 	const totalCatalogTokens = Math.round(totalCatalogChars / 3.8);
 
-	console.log(`  ✔ Discovered ${skills.length} unique production skills in ${(t1Scan - t0Scan).toFixed(1)}ms`);
-	console.log(`  ✔ Total Catalog Size: ${(totalCatalogChars / 1024 / 1024).toFixed(2)} MB (${totalCatalogTokens.toLocaleString("en-US")} tokens)`);
-	console.log(`  ⚠️ Naive Full-Dump Token Cost: ${totalCatalogTokens.toLocaleString("en-US")} tokens / turn ($${((totalCatalogTokens / 1e6) * 3.00).toFixed(4)} on Sonnet 3.7)`);
+	console.log(`  ✔ Scanned ${totalFilesFound} skill files across host -> ${skills.length} unique skills deduplicated in ${(t1Scan - t0Scan).toFixed(1)}ms`);
+	console.log(`  ✔ Unique Catalog Size: ${(totalCatalogChars / 1024 / 1024).toFixed(2)} MB (${totalCatalogTokens.toLocaleString("en-US")} tokens)`);
+	console.log(`  ⚠️ Full Catalog Dump Cost: ${totalCatalogTokens.toLocaleString("en-US")} tokens / turn ($${((totalCatalogTokens / 1e6) * 3.00).toFixed(4)} on Sonnet 3.7)`);
 
 	// ---------------------------------------------------------------------------
 	// Test 2: In-Memory BM25 Index Construction & Latency

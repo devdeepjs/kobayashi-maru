@@ -34,7 +34,7 @@ flowchart TD
 Standard agent harnesses dump every installed skill into the prompt, costing **~28,000 tokens per turn**.
 
 Kobayashi Maru implements **Zero-Dependency Skill Retrieval Augmentation (SRA)**:
-- **In-Memory Index**: Indexes runbooks in memory in $< 2\text{ms}$ with Okapi BM25 ($k_1=1.2, b=0.75$), scale-tested up to 500+ skills with zero degradation.
+- **In-Memory Index**: Indexes runbooks in memory in $< 2\text{ms}$ with Okapi BM25 ($k_1=1.2, b=0.75$), scale-tested across host libraries with zero degradation.
 - **Zero Cold-Start Bloat**: Generic greetings (`"hi"`, `"help"`, `"status"`) inject **0 skills** into context, preserving 100% of your token budget.
 - **Intent-Driven Injection**: Matches user prompt keywords and mounts **only the top 1–2 matched skills** (~150 tokens).
 - **Universal Tool Support**: Registers `find_skill` (with dual `execute` and `handler` methods) so models can search and mount any runbook mid-turn on demand.
