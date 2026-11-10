@@ -126,6 +126,12 @@ if [ -f "${SCRIPT_DIR}/vendor/extensions/evidence-reducer.ts" ]; then
   echo -e "  ✔ Deployed ${BOLD}evidence-reducer.ts${RESET} (/reducer rule-based elision)"
 fi
 
+# Deploy Protected Paths Guardrail (Protects .env, .git, keys, node_modules)
+if [ -f "${SCRIPT_DIR}/vendor/extensions/protected-paths.ts" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/extensions/protected-paths.ts" "${EXTENSIONS_DIR}/protected-paths.ts"
+  echo -e "  ✔ Deployed ${BOLD}protected-paths.ts${RESET} (Secret & git modification guardrail)"
+fi
+
 # Deploy Agent Profiles (scout, planner, reviewer, worker)
 mkdir -p "${PI_AGENT_DIR}/agents"
 if [ -d "${SCRIPT_DIR}/vendor/agents" ]; then
