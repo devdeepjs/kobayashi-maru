@@ -225,6 +225,7 @@ kobayashi eval --report
 
 ## 📖 Documentation Index
 
+- **[Complete User Manual & Daily Driver Guide](docs/MANUAL.md)**: Daily workflows, slash commands encyclopedia, multimodal images, and troubleshooting.
 - **[Executive Setup Guide](docs/EXECUTIVE_SETUP_GUIDE.md)**: Non-technical executive guide for choosing providers & managing costs.
 - **[Architecture Deep Dive](docs/ARCHITECTURE.md)**: In-depth technical guide to the 6 runtime pillars.
 - **[Skills & Runbooks Guide](docs/SKILLS_GUIDE.md)**: 38-skill catalog, authoring runbooks, and fresh-laptop onboarding.
