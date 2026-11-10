@@ -138,6 +138,12 @@ if [ -f "${SCRIPT_DIR}/vendor/extensions/session-namer.ts" ]; then
   echo -e "  ✔ Deployed ${BOLD}session-namer.ts${RESET} (/rename & Turn-1 clean naming)"
 fi
 
+# Deploy Rules Ingester (Auto-detects .cursorrules, .cursor/rules, .claude/rules)
+if [ -f "${SCRIPT_DIR}/vendor/extensions/rules-ingester.ts" ]; then
+  cp -f "${SCRIPT_DIR}/vendor/extensions/rules-ingester.ts" "${EXTENSIONS_DIR}/rules-ingester.ts"
+  echo -e "  ✔ Deployed ${BOLD}rules-ingester.ts${RESET} (Auto-ingests repo rules into prompt)"
+fi
+
 # Deploy Agent Profiles (scout, planner, reviewer, worker)
 mkdir -p "${PI_AGENT_DIR}/agents"
 if [ -d "${SCRIPT_DIR}/vendor/agents" ]; then
