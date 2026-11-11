@@ -958,6 +958,10 @@ const PRICING_TABLE: Record<string, { input: number; output: number; cacheRead: 
   "anthropic.claude-sonnet-5": { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
   "au.anthropic.claude-opus-4-6-v1": { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 18.75 },
   "deepseek/deepseek-v4-flash": { input: 0.14, output: 0.28, cacheRead: 0.014, cacheWrite: 0.14 },
+  "grok-4.7": { input: 2.00, output: 10.00, cacheRead: 0.20, cacheWrite: 2.00 },
+  "grok-4.6": { input: 2.00, output: 10.00, cacheRead: 0.20, cacheWrite: 2.00 },
+  "global.xai.grok-4.7": { input: 2.00, output: 10.00, cacheRead: 0.20, cacheWrite: 2.00 },
+  "us.xai.grok-4.7": { input: 2.00, output: 10.00, cacheRead: 0.20, cacheWrite: 2.00 },
 };
 
 const SONNET_BASELINE = { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 };
@@ -991,6 +995,8 @@ export function calculateTurnCosts(
       rate = { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 18.75 };
     } else if (/deepseek/i.test(cleanModel)) {
       rate = { input: 0.14, output: 0.28, cacheRead: 0.014, cacheWrite: 0.14 };
+    } else if (/grok/i.test(cleanModel)) {
+      rate = { input: 2.00, output: 10.00, cacheRead: 0.20, cacheWrite: 2.00 };
     } else {
       rate = { input: 0.22, output: 1.32, cacheRead: 0.02, cacheWrite: 0.22 };
     }
