@@ -35,7 +35,8 @@ else
     git clone --depth 1 https://github.com/devdeepjs/kobayashi-maru.git "${REPO_DIR}"
   else
     echo -e "${CYAN}Updating Kobayashi Maru in ${REPO_DIR}...${RESET}"
-    git -C "${REPO_DIR}" pull --quiet || true
+    git -C "${REPO_DIR}" fetch origin main --quiet || true
+    git -C "${REPO_DIR}" reset --hard origin/main --quiet || git -C "${REPO_DIR}" pull --quiet || true
   fi
   SCRIPT_DIR="${REPO_DIR}"
 fi

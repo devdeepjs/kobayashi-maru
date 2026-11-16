@@ -242,7 +242,8 @@ if [ ! -f "${SCRIPT_DIR}/package.json" ]; then
   if [ -n "$GIT_CMD" ]; then
     if [ -d "${INSTALL_TARGET}/.git" ]; then
       echo -e "  Updating existing repository via git..."
-      $GIT_CMD -C "${INSTALL_TARGET}" pull --rebase origin main --quiet || true
+      $GIT_CMD -C "${INSTALL_TARGET}" fetch origin main --quiet || true
+      $GIT_CMD -C "${INSTALL_TARGET}" reset --hard origin/main --quiet || $GIT_CMD -C "${INSTALL_TARGET}" pull --rebase origin main --quiet || true
     else
       echo -e "  Cloning repository via git..."
       rm -rf "${INSTALL_TARGET}"
