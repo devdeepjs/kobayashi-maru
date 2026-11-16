@@ -158,6 +158,12 @@ if [ -d "${SCRIPT_DIR}/vendor/prompts" ]; then
   echo -e "  ✔ Deployed ${BOLD}prompts/${RESET} (/implement, /scout-and-plan workflow templates)"
 fi
 
+# Deploy System Prompt Addendum (Critical Thinking & Cold War Olympic Judge Persona)
+if [ -f "${SCRIPT_DIR}/APPEND_SYSTEM.md" ]; then
+  cp -f "${SCRIPT_DIR}/APPEND_SYSTEM.md" "${PI_AGENT_DIR}/APPEND_SYSTEM.md"
+  echo -e "  ✔ Deployed ${BOLD}APPEND_SYSTEM.md${RESET} (Critical thinking partnership & Cold War Olympic judge persona)"
+fi
+
 # ------------------------------------------------------------------------------
 # 3. Safely Merge settings.json (Preserves auth.json & User Customizations)
 # ------------------------------------------------------------------------------

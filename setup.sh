@@ -753,6 +753,12 @@ if [ "$CONFIG_ONLY" = false ]; then
     cp -f "${dash_src}" "${PI_AGENT_DIR}/exec-dashboard.mjs"
     echo -e "  ✔ Deployed: ${GREEN}exec-dashboard.mjs${RESET} -> ~/.pi/agent/"
   fi
+
+  # Deploy system prompt addendum (Critical thinking & Cold War judge persona)
+  if [ -f "${SCRIPT_DIR}/APPEND_SYSTEM.md" ]; then
+    cp -f "${SCRIPT_DIR}/APPEND_SYSTEM.md" "${PI_AGENT_DIR}/APPEND_SYSTEM.md"
+    echo -e "  ✔ Deployed: ${GREEN}APPEND_SYSTEM.md${RESET} -> ~/.pi/agent/"
+  fi
 fi
 
 if [ "$EXTENSIONS_ONLY" = true ]; then
