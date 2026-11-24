@@ -87,13 +87,37 @@ export function discoverProjectRules(rootDir: string): DiscoveredRule[] {
 		});
 	}
 
+	const verifyRoot = path.join(rootDir, ".cursor", "skills");
+	if (fs.existsSync(verifyRoot)) {
+		for (const entry of fs.readdirSync(verifyRoot, { withFileTypes: true })) {
+			if (!entry.isDirectory() || !entry.name.startsWith("verify-")) continue;
+			const skill = path.join(verifyRoot, entry.name, "SKILL.md");
+			if (!fs.existsSync(skill)) continue;
+			rules.push({
+				name: path.relative(rootDir, skill),
+				path: skill,
+				type: "agent",
+			});
+		}
+	}
+
 	return rules;
 }
 
 export function formatRulesGuideline(rules: DiscoveredRule[]): string {
 	if (rules.length === 0) return "";
-	const list = rules.map((r) => `- \`${r.name}\` (${r.type} rule)`).join("\n");
-	return `\n\n## Discovered Repository Rules\nThe following project rules are active in this workspace:\n${list}\nRead and strictly adhere to these rules when analyzing, modifying, or creating code in this repository.\n`;
+	const verify = rules.filter((r) => r.name.includes(`${path.sep}.cursor${path.sep}skills${path.sep}verify-`) || r.name.includes("/.cursor/skills/verify-") || r.name.startsWith(".cursor/skills/verify-"));
+	const rest = rules.filter((r) => !verify.includes(r));
+	let out = "";
+	if (rest.length > 0) {
+		const list = rest.map((r) => `- \`${r.name}\` (${r.type} rule)`).join("\n");
+		out += `\n\n## Discovered Repository Rules\nThe following project rules are active in this workspace:\n${list}\nRead and strictly adhere to these rules when analyzing, modifying, or creating code in this repository.\n`;
+	}
+	if (verify.length > 0) {
+		const list = verify.map((r) => `- \`${r.name}\``).join("\n");
+		out += `\n\n## App proof\nRead the verify skill before asking how to log in, test, or drive a feature. Open the one feature file for this task, not the whole map. New gotchas go in that file. Passwords stay out; the file names the pointer.\n${list}\n`;
+	}
+	return out;
 }
 
 export default function (pi: ExtensionAPI) {

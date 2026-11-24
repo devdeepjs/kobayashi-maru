@@ -165,7 +165,12 @@ export default function (pi: ExtensionAPI) {
               skillDocs.push({
                 name,
                 text: `${name} ${desc}`,
-                skill: { name, description: desc, filePath: skillPath },
+                skill: {
+                name,
+                description: desc,
+                filePath: skillPath,
+                disableModelInvocation: /disable-model-invocation:\s*true/.test(content),
+              },
               });
             }
           } catch {}
@@ -224,7 +229,8 @@ export default function (pi: ExtensionAPI) {
     }
 
     // BM25 Ranking over the indexed skill catalog
-    const hits = ranker.rank(promptText, skillDocs, 2);
+    const invocable = skillDocs.filter((d) => !d.skill?.disableModelInvocation);
+    const hits = ranker.rank(promptText, invocable, 2);
     const matched = hits
       .filter((h: any) => h.score >= 2.5)
       .map((h: any) => {

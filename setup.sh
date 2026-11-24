@@ -843,7 +843,8 @@ echo -e "  ✔ Configured Settings: ${GREEN}${SETTINGS_CONF}${RESET} (Default: $
 
 # 3. Comprehensive Models Configuration (Ollama, OpenRouter & Cursor Proxies)
 MODELS_CONF="${PI_AGENT_DIR}/models.json"
-cat > "${MODELS_CONF}" << 'EOF'
+_km_defaults="$(mktemp)"
+cat > "${_km_defaults}" << 'EOF'
 {
   "$schema": "https://pi.dev/schemas/models.schema.json",
   "providers": {
@@ -945,11 +946,15 @@ cat > "${MODELS_CONF}" << 'EOF'
   }
 }
 EOF
-echo -e "  ✔ Configured Omnichannel Model Registry: ${GREEN}${MODELS_CONF}${RESET} (Ollama, OpenRouter, Cursor Proxies)"
+node "${SCRIPT_DIR}/bin/merge-json-defaults.cjs" "${MODELS_CONF}" "${_km_defaults}"
+rm -f "${_km_defaults}"
+echo -e "  ✔ Configured Omnichannel Model Registry: ${GREEN}${MODELS_CONF}${RESET} (existing providers kept)"
 
 # 4. Virtual Model Routing Configuration (Any Model Customizable)
+# An existing file keeps planner, worker, advisor, custom, and userName. Missing keys are filled.
 VIRTUAL_MODELS_CONF="${PI_AGENT_DIR}/virtual-models.json"
-cat > "${VIRTUAL_MODELS_CONF}" << EOF
+_km_defaults="$(mktemp)"
+cat > "${_km_defaults}" << EOF
 {
   "\$schema": "https://pi.dev/schemas/virtual-models.schema.json",
   "planner": {
@@ -970,7 +975,9 @@ cat > "${VIRTUAL_MODELS_CONF}" << EOF
   "escalationThreshold": 2
 }
 EOF
-echo -e "  ✔ Configured Virtual Models: ${GREEN}${VIRTUAL_MODELS_CONF}${RESET} (Planner: ${PLANNER_PROVIDER}/${PLANNER_MODEL}, Worker: ${WORKER_PROVIDER}/${WORKER_MODEL})"
+node "${SCRIPT_DIR}/bin/merge-json-defaults.cjs" "${VIRTUAL_MODELS_CONF}" "${_km_defaults}"
+rm -f "${_km_defaults}"
+echo -e "  ✔ Configured Virtual Models: ${GREEN}${VIRTUAL_MODELS_CONF}${RESET} (existing planner, worker, advisor, custom, and userName kept)"
 
 # Merge any new custom virtual model into virtual-models.json
 if [ -n "$CUSTOM_VM_ID" ] && [ -n "$CUSTOM_VM_PLANNER" ] && [ -n "$CUSTOM_VM_WORKER" ]; then
@@ -994,7 +1001,8 @@ fi
 
 # 5. Keyless Jina Reader Web Routing for JavaScript Rendered Sites (Jira, Confluence, etc.)
 WEB_SEARCH_CONF="${PI_AGENT_DIR}/web-search.json"
-cat > "${WEB_SEARCH_CONF}" << 'EOF'
+_km_defaults="$(mktemp)"
+cat > "${_km_defaults}" << 'EOF'
 {
   "$schema": "https://pi.dev/schemas/web-search.schema.json",
   "fetchRouting": {
@@ -1006,7 +1014,9 @@ cat > "${WEB_SEARCH_CONF}" << 'EOF'
   }
 }
 EOF
-echo -e "  ✔ Configured Dynamic Web Fetching (Jina Reader for Jira/Confluence): ${GREEN}${WEB_SEARCH_CONF}${RESET}"
+node "${SCRIPT_DIR}/bin/merge-json-defaults.cjs" "${WEB_SEARCH_CONF}" "${_km_defaults}"
+rm -f "${_km_defaults}"
+echo -e "  ✔ Configured Dynamic Web Fetching (Jina Reader for Jira/Confluence): ${GREEN}${WEB_SEARCH_CONF}${RESET} (existing keys kept)"
 
 # 6. Auto-Import MCP Servers from Claude Desktop & Cursor
 if [ "$MCP_IMPORT" = true ]; then
