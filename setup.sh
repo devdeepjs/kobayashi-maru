@@ -684,6 +684,21 @@ if [ "$EXTENSIONS_ONLY" = false ] && [ "$CONFIG_ONLY" = false ]; then
     cp -R "${SKILLS_SRC}/"* "${SKILLS_DIR}/" 2>/dev/null || true
   fi
 
+  # pstack is not copied into this repo. Matt Pocock keeps tdd and teach.
+  # Fetch it once; a later setup leaves the installed copy alone.
+  if [ ! -d "${HOME}/.agents/vendor/pstack/skills" ]; then
+    _pstack_tmp="$(mktemp -d)"
+    echo -e "  Fetching pstack..."
+    if git clone --depth 1 --filter=blob:none --sparse https://github.com/cursor/plugins.git "${_pstack_tmp}/plugins" \
+      && git -C "${_pstack_tmp}/plugins" sparse-checkout set pstack \
+      && bash "${SCRIPT_DIR}/bin/install-pstack.sh" "${_pstack_tmp}/plugins/pstack"; then
+      echo -e "  pstack linked into ~/.agents/skills"
+    else
+      echo -e "  ${YELLOW}pstack fetch failed. Re-run bin/install-pstack.sh with a pstack checkout.${RESET}"
+    fi
+    rm -rf "${_pstack_tmp}"
+  fi
+
   # Import custom skills from Git repository if requested
   GIT_BIN="$(find_working_git || true)"
   if [ -n "$SKILLS_REPO" ]; then
