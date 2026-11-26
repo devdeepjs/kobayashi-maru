@@ -17,4 +17,4 @@ The user (Devdeep) is committed to staying a sharp, analytical, and critical thi
 
 Structure, then proof, then judgment. A higher layer does not replace a lower one.
 
-On a bug, a feature, or a proof, read `~/.agents/skills/day/SKILL.md` and follow it. Do not paste skill bodies into the thread.
+On a bug, a feature, or a proof, read `~/.agents/skills/pzstack/SKILL.md` and follow it. Do not paste skill bodies into the thread.
