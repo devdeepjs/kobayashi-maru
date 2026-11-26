@@ -223,8 +223,16 @@ export default function (pi: ExtensionAPI) {
     }
 
     // 2. Intent-based Skill Injection: Zero tokens on generic prompts
+    const pinRoute = () => {
+      const pinned = skillDocs.find((d) => d.name === "pzstack");
+      const list = event.systemPromptOptions.skills || [];
+      if (!pinned || list.some((s) => s?.name === "pzstack")) return;
+      event.systemPromptOptions.skills = [...list, pinned.skill];
+    };
+
     if (!promptText || promptText.trim().length < 8) {
       event.systemPromptOptions.skills = [];
+      pinRoute();
       return;
     }
 
@@ -240,6 +248,7 @@ export default function (pi: ExtensionAPI) {
       .filter(Boolean);
 
     event.systemPromptOptions.skills = matched;
+    pinRoute();
   });
 
   // Meta-tool for on-demand skill retrieval during multi-turn sessions

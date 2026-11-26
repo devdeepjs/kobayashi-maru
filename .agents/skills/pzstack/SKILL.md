@@ -1,7 +1,6 @@
 ---
 name: pzstack
-description: "Devdeep's working route. Read before a bug, a feature, or a proof."
-disable-model-invocation: true
+description: "Read before a bug, a feature, or a proof."
 ---
 
 # pzstack
